@@ -1,0 +1,4 @@
+Doxyfile
+compile_commands.json
+*.o
+*.a

@@ -17,4 +17,50 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <iostream>
+#include <chrono>
+#include <cmath>
+#include <immintrin.h>
 
+uint64_t ranIntLooped() noexcept {
+	unsigned long long rInt;
+	// this can be in infinite loop if the random number pool is depleted
+	// but then we have more serious system-wide issues
+	while (_rdrand64_step(&rInt) == 0){
+	}
+
+	return static_cast<uint64_t> (rInt);
+}
+
+int32_t ranIntUnchk(unsigned long long &rInt) noexcept {
+	return _rdrand64_step(&rInt);
+}
+
+int main(int argc, char *argv[]){
+	std::chrono::duration<float, std::milli> loopTime;
+	std::chrono::duration<float, std::milli> unchkTime;
+	std::chrono::duration<float, std::milli> baseTime;
+	uint64_t tstVal;
+	unsigned long long tstULL;
+	auto time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 9999; ++i){
+		tstVal = ranIntLooped();
+	}
+	auto time2 = std::chrono::high_resolution_clock::now();
+	loopTime = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 9999; ++i){
+		const int32_t trash = ranIntUnchk(tstULL);
+		tstVal = static_cast<uint64_t> (tstULL);
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	unchkTime = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 9999; ++i){
+		const int32_t trash = _rdrand64_step(&tstULL);
+		tstVal = static_cast<uint64_t> (tstULL);
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	baseTime = time2 - time1;
+	std::cout << loopTime.count() << " " << unchkTime.count() << " " << baseTime.count() << "\n";
+}

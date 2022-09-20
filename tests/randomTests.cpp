@@ -17,10 +17,14 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <array>
 #include <iostream>
 #include <chrono>
 #include <cmath>
 #include <immintrin.h>
+#include <random>
+
+#include "../externals/bayesicUtilities/random.hpp"
 
 uint64_t ranIntLooped() noexcept {
 	unsigned long long rInt;
@@ -40,6 +44,8 @@ int main(int argc, char *argv[]){
 	std::chrono::duration<float, std::milli> loopTime;
 	std::chrono::duration<float, std::milli> unchkTime;
 	std::chrono::duration<float, std::milli> baseTime;
+	std::chrono::duration<float, std::milli> classTime;
+	std::chrono::duration<float, std::milli> stdTime;
 	uint64_t tstVal;
 	unsigned long long tstULL;
 	auto time1 = std::chrono::high_resolution_clock::now();
@@ -62,5 +68,22 @@ int main(int argc, char *argv[]){
 	}
 	time2 = std::chrono::high_resolution_clock::now();
 	baseTime = time2 - time1;
-	std::cout << loopTime.count() << " " << unchkTime.count() << " " << baseTime.count() << "\n";
+	BayesicSpace::RanDraw tstRan;
+	std::array<uint64_t, 10000> res;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 9999; ++i){
+		res[i] = tstRan.ranInt();
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	classTime = time2 - time1;
+	std::mt19937_64 stdGen;
+	stdGen.seed( __rdtsc() );
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 9999; ++i){
+		res[i] = stdGen();
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	stdTime = time2 - time1;
+	
+	std::cout << loopTime.count() << " " << unchkTime.count() << " " << baseTime.count() << " " << classTime.count() << " | " << stdTime.count() << "\n";
 }

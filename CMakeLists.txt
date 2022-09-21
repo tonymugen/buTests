@@ -23,11 +23,14 @@ else()
 	endif()
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -pedanitc")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
 
 add_executable(randomTests
 	tests/randomTests.cpp
-	externals/bayesicUtilities/random.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(randomTests
+	PRIVATE externals/bayesicUtilities/include
 )
 
 target_compile_options(randomTests

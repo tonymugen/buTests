@@ -24,7 +24,7 @@
 #include <immintrin.h>
 #include <random>
 
-#include "../externals/bayesicUtilities/random.hpp"
+#include "random.hpp"
 
 uint64_t ranIntLooped() noexcept {
 	unsigned long long rInt;
@@ -40,41 +40,40 @@ int32_t ranIntUnchk(unsigned long long &rInt) noexcept {
 	return _rdrand64_step(&rInt);
 }
 
-int main(int argc, char *argv[]){
+int main(){
 	std::chrono::duration<float, std::milli> loopTime;
 	std::chrono::duration<float, std::milli> unchkTime;
 	std::chrono::duration<float, std::milli> baseTime;
 	std::chrono::duration<float, std::milli> classTime;
 	std::chrono::duration<float, std::milli> stdTime;
-	uint64_t tstVal;
+	std::array<uint64_t, 10000> res;
 	unsigned long long tstULL;
 	auto time1 = std::chrono::high_resolution_clock::now();
 	for (size_t i = 0; i < 9999; ++i){
-		tstVal = ranIntLooped();
+		res[i] = ranIntLooped();
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
-	loopTime = time2 - time1;
-	time1 = std::chrono::high_resolution_clock::now();
+	loopTime   = time2 - time1;
+	time1      = std::chrono::high_resolution_clock::now();
 	for (size_t i = 0; i < 9999; ++i){
-		const int32_t trash = ranIntUnchk(tstULL);
-		tstVal = static_cast<uint64_t> (tstULL);
+		ranIntUnchk(tstULL);
+		res[i] = static_cast<uint64_t> (tstULL);
 	}
-	time2 = std::chrono::high_resolution_clock::now();
+	time2     = std::chrono::high_resolution_clock::now();
 	unchkTime = time2 - time1;
-	time1 = std::chrono::high_resolution_clock::now();
+	time1     = std::chrono::high_resolution_clock::now();
 	for (size_t i = 0; i < 9999; ++i){
-		const int32_t trash = _rdrand64_step(&tstULL);
-		tstVal = static_cast<uint64_t> (tstULL);
+		_rdrand64_step(&tstULL);
+		res[i] = static_cast<uint64_t> (tstULL);
 	}
-	time2 = std::chrono::high_resolution_clock::now();
+	time2    = std::chrono::high_resolution_clock::now();
 	baseTime = time2 - time1;
 	BayesicSpace::RanDraw tstRan;
-	std::array<uint64_t, 10000> res;
 	time1 = std::chrono::high_resolution_clock::now();
 	for (size_t i = 0; i < 9999; ++i){
 		res[i] = tstRan.ranInt();
 	}
-	time2 = std::chrono::high_resolution_clock::now();
+	time2     = std::chrono::high_resolution_clock::now();
 	classTime = time2 - time1;
 	std::mt19937_64 stdGen;
 	stdGen.seed( __rdtsc() );
@@ -82,8 +81,8 @@ int main(int argc, char *argv[]){
 	for (size_t i = 0; i < 9999; ++i){
 		res[i] = stdGen();
 	}
-	time2 = std::chrono::high_resolution_clock::now();
+	time2   = std::chrono::high_resolution_clock::now();
 	stdTime = time2 - time1;
 	
-	std::cout << loopTime.count() << " " << unchkTime.count() << " " << baseTime.count() << " " << classTime.count() << " | " << stdTime.count() << "\n";
+	std::cout << loopTime.count() << "\t" << unchkTime.count() << "\t" << baseTime.count() << "\t" << classTime.count() << "\t" << stdTime.count() << "\n";
 }

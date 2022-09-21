@@ -1,0 +1,86 @@
+\documentclass[fleqn,11pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{sectsty}
+\usepackage{amsbsy}
+\usepackage{fancyhdr}
+\usepackage{color}
+\usepackage{url}
+\usepackage[indention=2em,labelsep=period,labelfont=bf]{caption}
+\usepackage[normalsize,nooneline,sf,bf,FIGTOPCAP,tight]{subfigure}
+\usepackage[noae]{Sweave} % noae required to sanitize single quotes
+\usepackage{fancyvrb}
+
+\textwidth = 6.5 in
+\textheight = 8.5 in
+\oddsidemargin = 0.0 in
+\evensidemargin = 0.0 in
+\topmargin = 0.0 in
+\headheight = 15 pt
+\headsep = 0.1 in
+\parskip = 0.0 in
+\parindent = 4 ex
+
+\definecolor{grey}{rgb}{0.4,0.4,0.4}
+
+\newcommand{\bcdot}{\boldsymbol{\cdot}}
+
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{tabsize=4}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{tabsize=4}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{tabsize=4,formatcom=\color{grey},fontsize=\small}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Page \thepage}
+\lhead{RNG Timing}
+\chead{Tony Greenberg}
+
+\title{Plot execution times of various (P)RNG methods}
+\author{Tony Greenberg}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+<<echo=false>>=
+options(width=90)
+library(data.table)
+library(ggplot2)
+library(showtext)
+font_add("myriad", regular="MYRIADPRO-SEMIBOLD.OTF",
+	bold="MYRIADPRO-BOLD.OTF", italic="MYRIADPRO-SEMIBOLDIT.OTF")
+sessionInfo()
+@
+In this document I look at execution time of the various (P)RNG methods in C++. I start by reading the results.
+<<>>=
+timeDT <- fread("./randomTiming.tsv")
+@
+I want fold difference from my implementation of the Mersenne Twister.
+<<>>=
+timeDT <- timeDT[, lapply(.SD, `/`, myMT),
+	 .SDcols = c("chkRDRAND", "unchkRDRAND", "rawRDRAND", "stdMT")]
+timeDT <- melt(timeDT,
+	measure.vars = c("chkRDRAND", "unchkRDRAND", "rawRDRAND", "stdMT"))
+timeDT[, .(median = median(value),
+			ci05 = quantile(value, 0.025),
+			ci95 = quantile(value, 0.975)),
+	by = variable]
+@
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "relTime.pdf"
+showtext_auto()
+ggplot(data = timeDT, aes(x = variable, y = value)) +
+	geom_boxplot(fill = "grey75") +
+	theme_classic(base_size = 18, base_family = "myriad") +
+	theme(strip.background=element_rect(fill="grey95", linetype="blank")) +
+	ylab("time ratio to my MT") + xlab("method")
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+
+\end{document}
+
+
+

@@ -51,7 +51,9 @@ font_add("myriad", regular="MYRIADPRO-SEMIBOLD.OTF",
 	bold="MYRIADPRO-BOLD.OTF", italic="MYRIADPRO-SEMIBOLDIT.OTF")
 sessionInfo()
 @
-In this document I look at execution time of the various (P)RNG methods in C++. I start by reading the results.
+In this document I analyze execution times of various \verb|vash| algorithm components to see which ones should be optimized.
+\section{(P)RNG timing}
+I start by benchmarking the various (P)RNG methods in C++. Initial \verb|perf| results suggested that random integer generation was a major hotspot. I read the results.
 <<>>=
 timeDT <- fread("./randomTiming.tsv")
 @
@@ -79,7 +81,13 @@ ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FA
 cat("\\includegraphics{", pdfFlNam, "}\n\n", sep="")
 @
 \end{center}
-
+\section{OPH}
+I next analyze the two phases of OPH generation: bit permutation and hashing (index vector generation). Read the results.
+<<>>=
+hashTimeDT <- fread("./hashTiming.tsv")
+hashTimeDT[, quantile(permutation/sketching, c(0.025, 0.25, 0.5, 0.75, 0.975))]
+@
+Permutation takes more than twice the time. Will work on that.
 \end{document}
 
 

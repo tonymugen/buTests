@@ -25,6 +25,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
 
+# tests of the RNG
 add_executable(randomTests
 	tests/randomTests.cpp
 	externals/bayesicUtilities/src/random.cpp
@@ -43,3 +44,17 @@ set_target_properties(randomTests PROPERTIES
 	CXX_EXTENSIONS       OFF
 )
 
+# tests of the OPH function
+add_executable(hashTests
+	tests/hashTests.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(hashTests
+	PRIVATE externals/bayesicUtilities/include
+)
+
+set_target_properties(hashTests PROPERTIES
+	CXX_STANDARD         14
+	CXX_STANDARD_REQURED ON
+	CXX_EXTENSIONS       OFF
+)

@@ -1,0 +1,97 @@
+\documentclass[fleqn,11pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{sectsty}
+\usepackage{amsbsy}
+\usepackage{fancyhdr}
+\usepackage{color}
+\usepackage{url}
+\usepackage[indention=2em,labelsep=period,labelfont=bf]{caption}
+\usepackage[normalsize,nooneline,sf,bf,FIGTOPCAP,tight]{subfigure}
+\usepackage[noae]{Sweave} % noae required to sanitize single quotes
+\usepackage{fancyvrb}
+
+\textwidth = 6.5 in
+\textheight = 8.5 in
+\oddsidemargin = 0.0 in
+\evensidemargin = 0.0 in
+\topmargin = 0.0 in
+\headheight = 15 pt
+\headsep = 0.1 in
+\parskip = 0.0 in
+\parindent = 4 ex
+
+\definecolor{grey}{rgb}{0.4,0.4,0.4}
+
+\newcommand{\bcdot}{\boldsymbol{\cdot}}
+
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{tabsize=4}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{tabsize=4}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{tabsize=4,formatcom=\color{grey},fontsize=\small}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Page \thepage}
+\lhead{Fisher-Yates}
+\chead{Tony Greenberg}
+
+\title{Testing the Fisher-Yates implementation for correctness and timing}
+\author{Tony Greenberg}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+<<echo=false>>=
+options(width=90)
+library(data.table)
+library(ggplot2)
+library(showtext)
+font_add("myriad", regular="MYRIADPRO-SEMIBOLD.OTF",
+	bold="MYRIADPRO-BOLD.OTF", italic="MYRIADPRO-SEMIBOLDIT.OTF")
+sessionInfo()
+@
+\section{Correctness}
+Look at the distribution of samples from five integers, comparing the bottom-up and top-down algorithms.
+<<>>=
+up     <- table(scan("./fyTestUp.txt", what = character()))
+down   <- table(scan("./fyTestDown.txt", what = character()))
+distDT <- data.table(counts = c(up, down),
+				bins = c(names(up), names(down)),
+				algorithm = rep(c("up", "down"), each = length(up)))
+distDT
+@
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "fyDist.pdf"
+showtext_auto()
+ggplot(data = distDT, aes(x = bins, y = counts, fill = algorithm)) +
+	geom_col(position = "dodge") +
+	theme_classic(base_size = 18, base_family = "myriad") +
+	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+\section{Timing}
+Now compare execution times with and without branching.
+<<>>=
+timeDT <- fread("./fyTiming.tsv")
+timeDT <- timeDT[algorithm %in% c("Up1000", "Down1000"), time := time/100.0]
+timeDT
+@
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "fyTime.pdf"
+showtext_auto()
+ggplot(data = timeDT, aes(x = algorithm, y = time, fill = branch)) +
+	geom_boxplot() +
+	theme_classic(base_size = 18, base_family = "myriad")
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+\end{document}
+
+
+

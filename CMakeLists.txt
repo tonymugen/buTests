@@ -53,6 +53,15 @@ target_include_directories(hashTests
 	PRIVATE externals/bayesicUtilities/include
 )
 
+# Fisher-Yates tests
+add_executable(fyTests
+	tests/fisherYatesTest.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(fyTests
+	PRIVATE externals/bayesicUtilities/include
+)
+
 set_target_properties(hashTests PROPERTIES
 	CXX_STANDARD         14
 	CXX_STANDARD_REQURED ON

@@ -91,6 +91,81 @@ ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FA
 cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
 @
 \end{center}
+\section{Bit permutation}
+Look at my bit permutation methods.
+<<>>=
+bitDT <- fread("./hashDistDown.tsv",
+			colClasses = c(halfbyte = "character", bin = "character"))
+bitDT
+bitDT <- bitDT[, table(halfbyte), by = bin]
+names(bitDT) <- c("bin", "counts")
+getInd <- function(vec){return(1:length(vec))}
+bitDT[, idx := getInd(counts), by = bin]
+@
+Plot.
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "fyBitDistDown.pdf"
+showtext_auto()
+ggplot(data = bitDT[bin != "b31", ], aes(x = idx, y = counts)) +
+	geom_col() +
+	facet_wrap(~bin, ncol = 6) +
+	theme_classic(base_size = 14, base_family = "myriad") +
+	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(),
+		strip.background=element_rect(fill="grey95", linetype="blank"))
+ggsave(pdfFlNam, width = 8, height = 8, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+<<>>=
+bitDT <- fread("./hashDistUp.tsv",
+			colClasses = c(halfbyte = "character", bin = "character"))
+bitDT
+bitDT <- bitDT[, table(halfbyte), by = bin]
+names(bitDT) <- c("bin", "counts")
+getInd <- function(vec){return(1:length(vec))}
+bitDT[, idx := getInd(counts), by = bin]
+@
+Plot.
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "fyBitDistUp.pdf"
+showtext_auto()
+ggplot(data = bitDT[bin != "b31", ], aes(x = idx, y = counts)) +
+	geom_col() +
+	facet_wrap(~bin, ncol = 6) +
+	theme_classic(base_size = 14, base_family = "myriad") +
+	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(),
+		strip.background=element_rect(fill="grey95", linetype="blank"))
+ggsave(pdfFlNam, width = 8, height = 8, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+Finally, mixing downward sampling on integers with upwards swapping of bits. This is incorrect, but is interesting to see if there are obvious consequences.
+<<>>=
+bitDT <- fread("./hashDistUpDown.tsv",
+			colClasses = c(halfbyte = "character", bin = "character"))
+bitDT
+bitDT <- bitDT[, table(halfbyte), by = bin]
+names(bitDT) <- c("bin", "counts")
+getInd <- function(vec){return(1:length(vec))}
+bitDT[, idx := getInd(counts), by = bin]
+@
+Plot.
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "fyBitDistUpDown.pdf"
+showtext_auto()
+ggplot(data = bitDT[bin != "b31", ], aes(x = idx, y = counts)) +
+	geom_col() +
+	facet_wrap(~bin, ncol = 6) +
+	theme_classic(base_size = 14, base_family = "myriad") +
+	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(),
+		strip.background=element_rect(fill="grey95", linetype="blank"))
+ggsave(pdfFlNam, width = 8, height = 8, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
 \end{document}
 
 

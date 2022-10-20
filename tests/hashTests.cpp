@@ -65,8 +65,8 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	// Start with a permutation to make OPH
 	auto time1 = std::chrono::high_resolution_clock::now();
 	const uint8_t byteSize       = 8;
-	const uint8_t oneBit         = 0b00000001;
-	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
+	//const uint8_t oneBit         = 0b00000001;
+	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	size_t iIndiv                = nIndividuals - 1UL;
 	for (const auto &ri : permutation){
 		const uint16_t firstIdx = iIndiv % byteSize;
@@ -91,6 +91,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime = time2 - time1;
+	/*
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	std::vector<size_t> filledIndexes;                // indexes of the non-empty sketches
@@ -153,6 +154,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		}
 	}
 	time2      = std::chrono::high_resolution_clock::now();
+	*/
 	sketchTime = time2 - time1;
 	return std::array<float, 2>{permTime.count(), sketchTime.count()};
 }
@@ -164,14 +166,13 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 	// Start with a permutation to make OPH
 	auto time1 = std::chrono::high_resolution_clock::now();
 	const uint8_t byteSize       = 8;
-	const uint8_t oneBit         = 0b00000001;
-	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	size_t iIndiv                = nIndividuals - 1UL;
-	for (const auto &ri : permutation){
+	//const uint8_t oneBit         = 0b00000001;
+	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
+	for (size_t iIndiv = 0; iIndiv < nIndividuals - 1; ++iIndiv){
 		const uint16_t firstIdx = iIndiv % byteSize;
 		const size_t firstByte  = iIndiv / byteSize;
-		uint16_t secondIdx      = ri % byteSize;
-		const size_t secondByte = ri / byteSize;
+		uint16_t secondIdx      = permutation[iIndiv] % byteSize;
+		const size_t secondByte = permutation[iIndiv] / byteSize;
 		const uint16_t diff     = byteSize * (firstByte != secondByte); // will be 0 if the same byte is being accessed; then need to swap bits within byte
 
 		// swapping bits within a two-byte variable
@@ -186,10 +187,10 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 		memcpy( binLocus.data() + firstByte, &twoBytes, sizeof(uint8_t) );
 		twoBytes = twoBytes >> diff;
 		memcpy( binLocus.data() + secondByte, &twoBytes, sizeof(uint8_t) );
-		--iIndiv;
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime = time2 - time1;
+	/*
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	std::vector<size_t> filledIndexes;                // indexes of the non-empty sketches
@@ -252,22 +253,25 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 		}
 	}
 	time2      = std::chrono::high_resolution_clock::now();
+	*/
 	sketchTime = time2 - time1;
 	return std::array<float, 2>{permTime.count(), sketchTime.count()};
 }
 
 int main() {
 	BayesicSpace::RanDraw prng;
-	const size_t nIndividuals    = 1200;
+	//const size_t nIndividuals    = 1200;
+	const size_t nIndividuals    = 125;
 	const size_t kSketches       = 100;
 	const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
 	const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
 	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	const size_t ranBitVecSize   = nIndividuals / sizeof(uint64_t) + static_cast<bool> ( nIndividuals % sizeof(uint64_t) );
+	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
-	std::vector<size_t> ranInts{prng.shuffleUintUp(nIndividuals)};
+	//std::vector<size_t> ranInts{prng.shuffleUintUp(nIndividuals)};
+	std::vector<size_t> ranInts{prng.shuffleUintDown(nIndividuals)};
 	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
-	std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
+	//std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
 	std::vector<uint8_t> binLocus1;
 	std::vector<uint8_t> binLocus2;
 	std::vector<uint64_t> ranBits;
@@ -277,15 +281,22 @@ int main() {
 	for (const auto rb : ranBits){
 		const auto bits = reinterpret_cast<const uint8_t *>(&rb);
 		for (size_t ii = 0; ii < sizeof(uint64_t); ++ii){
-			binLocus1.push_back(bits[ii]);
 			binLocus2.push_back(bits[ii]);
 		}
 	}
-	const std::array<float, 2> resNew = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
-	const std::array<float, 2> res    = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
-	std::cout << res[0] << "\t" << res[1] << "\t" << resNew[0] << "\t" << resNew[1] << "\n";
-	std::cout << std::bitset<8>{binLocus1[0]} << "\n";
-	std::cout << std::bitset<8>{binLocus2[0]} << "\n";
-	binLocus1[0] ^= binLocus2[0];
-	std::cout << std::bitset<8>{binLocus1[0]} << "\n";
+	binLocus2.back() = binLocus2.back() >> 3;
+	binLocus1        = binLocus2;
+	//const std::array<float, 2> resNew = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
+	for (size_t i = 0; i < 400000; ++i){
+		//const std::array<float, 2> res = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
+		const std::array<float, 2> res = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
+		uint16_t ind = 1;
+		for (const auto b1 : binLocus1){
+			std::cout << std::bitset<4>(b1 >> 4) << "\tb" << ind << "\n" << std::bitset<4>(b1) << "\tb" << ++ind << "\n";
+			++ind;
+		}
+		binLocus1 = binLocus2;
+		ranInts   = prng.shuffleUintDown(nIndividuals);
+	}
+	//std::cout << res[0] << "\t" << res[1] << "\t" << resNew[0] << "\t" << resNew[1] << "\n";
 }

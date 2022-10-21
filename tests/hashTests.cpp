@@ -262,16 +262,17 @@ int main() {
 	BayesicSpace::RanDraw prng;
 	//const size_t nIndividuals    = 1200;
 	const size_t nIndividuals    = 125;
-	const size_t kSketches       = 100;
-	const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
-	const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
+	//const size_t kSketches       = 100;
+	const size_t kSketches       = 20;
+	//const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
+	//const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
 	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
-	//std::vector<size_t> ranInts{prng.shuffleUintUp(nIndividuals)};
-	std::vector<size_t> ranInts{prng.shuffleUintDown(nIndividuals)};
+	std::vector<size_t> ranInts{prng.shuffleUintUp(nIndividuals)};
+	//std::vector<size_t> ranInts{prng.shuffleUintDown(nIndividuals)};
 	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
-	//std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
+	std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
 	std::vector<uint8_t> binLocus1;
 	std::vector<uint8_t> binLocus2;
 	std::vector<uint64_t> ranBits;
@@ -286,17 +287,44 @@ int main() {
 	}
 	binLocus2.back() = binLocus2.back() >> 3;
 	binLocus1        = binLocus2;
-	//const std::array<float, 2> resNew = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
-	for (size_t i = 0; i < 400000; ++i){
-		//const std::array<float, 2> res = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
-		const std::array<float, 2> res = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
-		uint16_t ind = 1;
-		for (const auto b1 : binLocus1){
-			std::cout << std::bitset<4>(b1 >> 4) << "\tb" << ind << "\n" << std::bitset<4>(b1) << "\tb" << ++ind << "\n";
-			++ind;
-		}
-		binLocus1 = binLocus2;
-		ranInts   = prng.shuffleUintDown(nIndividuals);
+	std::cout << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
+		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
+	uint64_t m{0};
+	auto m32 = reinterpret_cast<uint32_t *>(&m);
+	m32[0]   = 0b00010000'00100000'01000000'10000000;
+	m32[1]   = 0b00000001'00000010'00000100'00001000;
+	std::cout << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
+		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	ranBits[0] &= m;
+	std::cout << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
+		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
+	uint64_t mk = ~m << 1;
+	std::cout << std::bitset<8>(mk) << " " << std::bitset<8>(mk >> 8) << " " << std::bitset<8>(mk >> 16) << " " << std::bitset<8>(mk >> 24) << " " << std::bitset<8>(mk >> 32) << 
+		" " << std::bitset<8>(mk >> 40) << " " << std::bitset<8>(mk >> 48) << " " << std::bitset<8>(mk >> 56) << "\n";
+	uint64_t mp = mk ^ (mk << 1);
+	std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
+		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
+	mp = mp ^ (mp << 2);
+	std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
+		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
+	mp = mp ^ (mp << 4);
+	std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
+		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
+	mp = mp ^ (mp << 8);
+	std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
+		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
+	mp = mp ^ (mp << 16);
+	std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
+		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
+		//<< std::bitset<8>(binLocus1[0]) << " " << std::bitset<8>(binLocus1[1]) << "\n";
+	//const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
+	//const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
+	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
+	/*
+	for (size_t i = 0; i < binLocus1.size(); ++i){
+		std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
 	}
-	//std::cout << res[0] << "\t" << res[1] << "\t" << resNew[0] << "\t" << resNew[1] << "\n";
+	std::cout << "\n";
+	*/
+	//std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
 }

@@ -287,89 +287,37 @@ int main() {
 	}
 	binLocus2.back() = binLocus2.back() >> 3;
 	binLocus1        = binLocus2;
-	std::cout << "x64:   " << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
-		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
-	uint32_t x = ranBits[0] >> 32;
-	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << "\n";
 	uint64_t m{0};
-	auto m32 = reinterpret_cast<uint32_t *>(&m);
-	m32[0]   = 0b00010000'00100000'01000000'10000000;
-	m32[1]   = 0b00000001'00000010'00000100'00001000;
-	std::cout << "m:     " << std::bitset<8>(m32[1]) << " " << std::bitset<8>(m32[1] >> 8) << " " << std::bitset<8>(m32[1] >> 16) << " " << std::bitset<8>(m32[1] >> 24) << "\n";
-	x &= m32[1];
-	std::cout << "x & m: " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << "\n";
-	uint32_t mk32 = ~m32[1] << 1;
-	uint32_t mp32{0};
-	uint32_t mv32{0};
-	for (uint32_t i = 0; i < 5; ++i){
-		mp32   = mk32 ^ (mk32 << 1);
-		mp32   = mp32 ^ (mp32 << 2);
-		mp32   = mp32 ^ (mp32 << 4);
-		mp32   = mp32 ^ (mp32 << 8);
-		mp32   = mp32 ^ (mp32 << 16);
-		mv32   = mp32 & m32[1];
-		m32[1] = (m32[1] ^ mv32) | ( mv32 >> (1 << i) );
-		const uint32_t t32 = x & mv32;
-		x    = (x ^ t32) | ( t32 >> (1 << i) );
-		mk32 = mk32 & ~mp32;
-	}
-	//std::cout << "m:     " << std::bitset<8>(m32[1]) << " " << std::bitset<8>(m32[1] >> 8) << " " << std::bitset<8>(m32[1] >> 16) << " " << std::bitset<8>(m32[1] >> 24) << "\n";
-	//std::cout << "mk:    " << std::bitset<8>(mk32) << " " << std::bitset<8>(mk32 >> 8) << " " << std::bitset<8>(mk32 >> 16) << " " << std::bitset<8>(mk32 >> 24) << "\n";
-	//std::cout << "mp:    " << std::bitset<8>(mp32) << " " << std::bitset<8>(mp32 >> 8) << " " << std::bitset<8>(mp32 >> 16) << " " << std::bitset<8>(mp32 >> 24) << "\n";
-	std::cout << "\n";
-	std::cout << "m:     " << std::bitset<8>(m32[1]) << " " << std::bitset<8>(m32[1] >> 8) << " " << std::bitset<8>(m32[1] >> 16) << " " << std::bitset<8>(m32[1] >> 24) << "\n";
-	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << "\n";
-	/*
-	//std::cout << "m: " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-	//	" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
-	ranBits[0] &= m;
-	//std::cout << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
-	//	" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
+	auto m32    = reinterpret_cast<uint32_t *>(&m);
+	m32[0]      = 0b00010000'00100000'01000000'10000000;
+	m32[1]      = 0b00000001'00000010'00000100'00001000;
 	uint64_t mk = ~m << 1;
-	//std::cout << std::bitset<8>(mk) << " " << std::bitset<8>(mk >> 8) << " " << std::bitset<8>(mk >> 16) << " " << std::bitset<8>(mk >> 24) << " " << std::bitset<8>(mk >> 32) << 
-	//	" " << std::bitset<8>(mk >> 40) << " " << std::bitset<8>(mk >> 48) << " " << std::bitset<8>(mk >> 56) << "\n";
-	uint64_t mp = mk ^ (mk << 1);
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	mp = mp ^ (mp << 2);
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	mp = mp ^ (mp << 4);
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	mp = mp ^ (mp << 8);
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	mp = mp ^ (mp << 16);
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	mp = mp ^ (mp << 32);
-	uint64_t mv = mp & m;
-	//std::cout << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-	//	" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	//std::cout << "\n";
-	std::cout << "x & m: " << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
-		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
-	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
-	std::cout << "mk:    " << std::bitset<8>(mk) << " " << std::bitset<8>(mk >> 8) << " " << std::bitset<8>(mk >> 16) << " " << std::bitset<8>(mk >> 24) << " " << std::bitset<8>(mk >> 32) << 
-		" " << std::bitset<8>(mk >> 40) << " " << std::bitset<8>(mk >> 48) << " " << std::bitset<8>(mk >> 56) << "\n";
-	std::cout << "mp:    " << std::bitset<8>(mp) << " " << std::bitset<8>(mp >> 8) << " " << std::bitset<8>(mp >> 16) << " " << std::bitset<8>(mp >> 24) << " " << std::bitset<8>(mp >> 32) << 
-		" " << std::bitset<8>(mp >> 40) << " " << std::bitset<8>(mp >> 48) << " " << std::bitset<8>(mp >> 56) << "\n";
-	std::cout << "mv:    " << std::bitset<8>(mv) << " " << std::bitset<8>(mv >> 8) << " " << std::bitset<8>(mv >> 16) << " " << std::bitset<8>(mv >> 24) << " " << std::bitset<8>(mv >> 32) << 
-		" " << std::bitset<8>(mv >> 40) << " " << std::bitset<8>(mv >> 48) << " " << std::bitset<8>(mv >> 56) << "\n";
-	m = (m ^ mv) | (mv >> 1);
-	uint64_t t = ranBits[0] & mv;
-	ranBits[0] = (ranBits[0] ^ t) | (t >> 1);
-	std::cout << "\n";
-	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	uint64_t mp{0};
+	uint64_t mv{0};
 	std::cout << "x:     " << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
 		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
-	mk = mk & ~mp;
-	std::cout << "mk:    " << std::bitset<8>(mk) << " " << std::bitset<8>(mk >> 8) << " " << std::bitset<8>(mk >> 16) << " " << std::bitset<8>(mk >> 24) << " " << std::bitset<8>(mk >> 32) << 
-		" " << std::bitset<8>(mk >> 40) << " " << std::bitset<8>(mk >> 48) << " " << std::bitset<8>(mk >> 56) << "\n";
-	*/
+	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
+		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	uint64_t x = ranBits[0] & m;
+	std::cout << "x & m: " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
+		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
+	for (uint32_t i = 0; i < 6; ++i){
+		mp = mk ^ (mk << 1);
+		mp = mp ^ (mp << 2);
+		mp = mp ^ (mp << 4);
+		mp = mp ^ (mp << 8);
+		mp = mp ^ (mp << 16);
+		mp = mp ^ (mp << 32);
+		mv = mp & m;
+		m  = (m ^ mv) | ( mv >> (1 << i) );
+		const uint64_t t = x & mv;
+		x  = (x ^ t) | ( t >> (1 << i) );
+		mk = mk & ~mp;
+	}
+	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
+		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
+	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
+		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
 	//const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
 	//const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);

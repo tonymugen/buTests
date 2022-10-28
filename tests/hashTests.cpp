@@ -288,9 +288,14 @@ int main() {
 	binLocus2.back() = binLocus2.back() >> 3;
 	binLocus1        = binLocus2;
 	uint64_t m{0};
-	auto m32    = reinterpret_cast<uint32_t *>(&m);
-	m32[0]      = 0b00010000'00100000'01000000'10000000;
-	m32[1]      = 0b00000001'00000010'00000100'00001000;
+	auto m32     = reinterpret_cast<uint32_t *>(&m);
+	m32[0]       = 0b00010000'00100000'01000000'10000000;
+	m32[1]       = 0b00000001'00000010'00000100'00001000;
+	uint64_t mEx = m;
+	//
+	// The mask bits are from right to left
+	// The selected bits end up from left to right in the left-most byte
+	//
 	uint64_t mk = ~m << 1;
 	uint64_t mp{0};
 	uint64_t mv{0};
@@ -301,6 +306,7 @@ int main() {
 	uint64_t x = ranBits[0] & m;
 	std::cout << "x & m: " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
 		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
+	uint64_t t;
 	for (uint32_t i = 0; i < 6; ++i){
 		mp = mk ^ (mk << 1);
 		mp = mp ^ (mp << 2);
@@ -310,7 +316,7 @@ int main() {
 		mp = mp ^ (mp << 32);
 		mv = mp & m;
 		m  = (m ^ mv) | ( mv >> (1 << i) );
-		const uint64_t t = x & mv;
+		t  = x & mv;
 		x  = (x ^ t) | ( t >> (1 << i) );
 		mk = mk & ~mp;
 	}
@@ -318,6 +324,35 @@ int main() {
 		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
 	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
 		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	//
+	// Now do the expansion
+	//
+	m = mEx;
+	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
+		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	std::array<uint64_t, 6> a;
+	mk = ~m << 1;
+	for (uint32_t i = 0; i < 6; ++i){
+		mp   = mk ^ (mk << 1);
+		mp   = mp ^ (mp << 2);
+		mp   = mp ^ (mp << 4);
+		mp   = mp ^ (mp << 8);
+		mp   = mp ^ (mp << 16);
+		mp   = mp ^ (mp << 32);
+		mv   = mp & m;
+		a[i] = mv;
+		m    = (m ^ mv) | ( mv >> (1 << i) );
+		mk   = mk & ~mp;
+	}
+	x  = (x & ~a[5]) | ( (x << 32) & a[5] );
+	x  = (x & ~a[4]) | ( (x << 16) & a[4] );
+	x  = (x & ~a[3]) | ( (x << 8) & a[3] );
+	x  = (x & ~a[2]) | ( (x << 4) & a[2] );
+	x  = (x & ~a[1]) | ( (x << 2) & a[1] );
+	x  = (x & ~a[0]) | ( (x << 1) & a[0] );
+	x &= mEx;
+	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
+		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
 	//const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
 	//const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);

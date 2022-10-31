@@ -25,6 +25,8 @@
 #include <limits>
 #include <array>
 #include <bitset>
+#include <immintrin.h>
+#include <x86intrin.h>
 
 #include "random.hpp"
 
@@ -168,25 +170,25 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 	const uint8_t byteSize       = 8;
 	//const uint8_t oneBit         = 0b00000001;
 	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	for (size_t iIndiv = 0; iIndiv < nIndividuals - 1; ++iIndiv){
-		const uint16_t firstIdx = iIndiv % byteSize;
-		const size_t firstByte  = iIndiv / byteSize;
-		uint16_t secondIdx      = permutation[iIndiv] % byteSize;
-		const size_t secondByte = permutation[iIndiv] / byteSize;
-		const uint16_t diff     = byteSize * (firstByte != secondByte); // will be 0 if the same byte is being accessed; then need to swap bits within byte
-
-		// swapping bits within a two-byte variable
-		// using the method in https://graphics.stanford.edu/~seander/bithacks.html#SwappingBitsXOR
-		// if the same byte is being accessed, secondIdx is not shifted to the second byte
-		// This may be affected by endianness (did not test)
-		uint16_t twoBytes  = (static_cast<uint16_t>(binLocus[secondByte]) << 8) | ( static_cast<uint16_t>(binLocus[firstByte]) );
-		secondIdx         += diff;
-		uint16_t x         = ( (twoBytes >> firstIdx) ^ (twoBytes >> secondIdx) ) & 1;
-		twoBytes          ^= ( (x << firstIdx) | (x << secondIdx) );
-
-		memcpy( binLocus.data() + firstByte, &twoBytes, sizeof(uint8_t) );
-		twoBytes = twoBytes >> diff;
-		memcpy( binLocus.data() + secondByte, &twoBytes, sizeof(uint8_t) );
+	// Deal with full bytes first
+	const size_t fullByteN = locusSize - static_cast<size_t>( nIndividuals - (nIndividuals & 0xfffffffffffffff8) );
+	size_t iIndiv = 0;
+	std::array<size_t, 8> permByteInd;
+	std::array<size_t, 8> permInByteInd;
+	uint64_t aggregateBytes64;
+	uint64_t swapBitMask;
+	auto aggregateByteArr = reinterpret_cast<uint8_t*>(&aggregateBytes64);
+	auto swapBitMakArr    = reinterpret_cast<uint8_t*>(&swapBitMask);
+	for (size_t iByte = 0; iByte < fullByteN; ++iByte){
+		// Aggregate bytes that contain bits that need to swapped
+		// with the bits in current byte into one 64-bit word.
+		// Add a mask that marks bits to be swapped with each byte
+		for (size_t iInByte = 0; iInByte < byteSize; ++iInByte){
+			const size_t perIndiv     = permutation[iIndiv++];                     // post-increment to use current value for index first
+			permByteInd[iInByte]      = perIndiv / byteSize;
+			permInByteInd[iInByte]    = perIndiv - (perIndiv & 0xfffffffffffffff8);
+			aggregateByteArr[iInByte] = binLocus[ permByteInd[iInByte] ];
+		}
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime = time2 - time1;
@@ -287,12 +289,16 @@ int main() {
 	}
 	binLocus2.back() = binLocus2.back() >> 3;
 	binLocus1        = binLocus2;
+	//
+	// Compress; corresponding intrinsic may be _pext_u64
+	//
 	uint64_t m{0};
 	auto m32     = reinterpret_cast<uint32_t *>(&m);
 	m32[0]       = 0b00010000'00100000'01000000'10000000;
 	m32[1]       = 0b00000001'00000010'00000100'00001000;
 	uint64_t mEx = m;
-	//
+	// Copy over for the intrinsic
+	uint64_t xi = _pext_u64(ranBits[0], m);
 	// The mask bits are from right to left
 	// The selected bits end up from left to right in the left-most byte
 	//
@@ -324,8 +330,10 @@ int main() {
 		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
 	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
 		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
+	std::cout << "xi:    " << std::bitset<8>(xi) << " " << std::bitset<8>(xi >> 8) << " " << std::bitset<8>(xi >> 16) << " " << std::bitset<8>(xi >> 24) << " " << std::bitset<8>(xi >> 32) << 
+		" " << std::bitset<8>(xi >> 40) << " " << std::bitset<8>(xi >> 48) << " " << std::bitset<8>(xi >> 56) << "\n";
 	//
-	// Now do the expansion
+	// Now do the expansion; corresponding intrinsic may be _pdep_u64
 	//
 	m = mEx;
 	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
@@ -353,14 +361,27 @@ int main() {
 	x &= mEx;
 	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
 		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
+	x = _pdep_u64(xi, mEx);
+	std::cout << "xi:    " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
+		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
+	//
+	// Exchange bits between bytes (need only one way)
+	//
+	uint8_t xb = 0b11111111;
+	uint8_t yb = 0b00000000;
+	uint8_t mb = 0b00100000;
+	std::cout << std::bitset<8>(xb) << "\n" << std::bitset<8>(yb) << "\n" << std::bitset<8>(mb) << "\n";
+	//const uint8_t tb = (xb ^ yb) & mb;
+	xb ^= (xb ^ yb) & mb;
+	//yb = yb ^ tb;
+	std::cout << std::bitset<8>(xb) << "\n" << std::bitset<8>(yb) << "\n";
 	//const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
 	//const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
-	/*
 	for (size_t i = 0; i < binLocus1.size(); ++i){
-		std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
+		//std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
+		std::cout << std::bitset<8>(binLocus1[i]) << " ";
 	}
 	std::cout << "\n";
-	*/
 	//std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
 }

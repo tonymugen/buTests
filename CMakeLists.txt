@@ -23,7 +23,8 @@ else()
 	endif()
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -pedantic")
+# -mbmi2 is for PEXT and PDEP
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -pedantic -mbmi2")
 
 # tests of the RNG
 add_executable(randomTests

@@ -26,7 +26,6 @@
 #include <array>
 #include <bitset>
 #include <immintrin.h>
-#include <x86intrin.h>
 
 #include "random.hpp"
 
@@ -166,19 +165,20 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 	std::chrono::duration<float, std::milli> permTime;
 	std::chrono::duration<float, std::milli> sketchTime;
 	// Start with a permutation to make OPH
-	auto time1 = std::chrono::high_resolution_clock::now();
+	auto time1                   = std::chrono::high_resolution_clock::now();
 	const uint8_t byteSize       = 8;
-	//const uint8_t oneBit         = 0b00000001;
+	const uint8_t oneBit         = 0b00000001;
 	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	// Deal with full bytes first
 	const size_t fullByteN = locusSize - static_cast<size_t>( nIndividuals - (nIndividuals & 0xfffffffffffffff8) );
-	size_t iIndiv = 0;
+	size_t iIndiv          = 0;
 	std::array<size_t, 8> permByteInd;
 	std::array<size_t, 8> permInByteInd;
-	uint64_t aggregateBytes64;
+	uint64_t aggregateBytes;
 	uint64_t swapBitMask;
-	auto aggregateByteArr = reinterpret_cast<uint8_t*>(&aggregateBytes64);
-	auto swapBitMakArr    = reinterpret_cast<uint8_t*>(&swapBitMask);
+	auto aggregateByteArr = reinterpret_cast<uint8_t*>(&aggregateBytes);
+	auto swapBitMaskArr   = reinterpret_cast<uint8_t*>(&swapBitMask);
+	// NOT RIGHT! The bounds are wrong for bottom-up Fisher-Yates!!!
 	for (size_t iByte = 0; iByte < fullByteN; ++iByte){
 		// Aggregate bytes that contain bits that need to swapped
 		// with the bits in current byte into one 64-bit word.
@@ -188,10 +188,63 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 			permByteInd[iInByte]      = perIndiv / byteSize;
 			permInByteInd[iInByte]    = perIndiv - (perIndiv & 0xfffffffffffffff8);
 			aggregateByteArr[iInByte] = binLocus[ permByteInd[iInByte] ];
+			swapBitMaskArr[iInByte]   = static_cast<uint8_t>(oneBit << permInByteInd[iInByte]);
+		}
+		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
+		uint64_t m  = swapBitMask;
+		uint64_t mk = ~swapBitMask << 1;
+		uint64_t mp;
+		uint64_t mv;
+		uint64_t t;
+		for (uint32_t i = 0; i < 6; ++i){
+			mp             = mk ^ (mk << 1);
+			mp             = mp ^ (mp << 2);
+			mp             = mp ^ (mp << 4);
+			mp             = mp ^ (mp << 8);
+			mp             = mp ^ (mp << 16);
+			mp             = mp ^ (mp << 32);
+			mv             = mp & m;
+			m              = (m ^ mv) | ( mv >> (1 << i) );
+			t              = aggregateBytes & mv;
+			aggregateBytes = (aggregateBytes ^ t) | ( t >> (1 << i) );
+			mk             = mk & ~mp;
+		}
+		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
+		binLocus[iByte]     ^= aggregateByteArr[0]; 
+		aggregateByteArr[0] ^= binLocus[iByte];
+		binLocus[iByte]     ^= aggregateByteArr[0]; 
+		// Now expand the bits swapped from the current binLocus byte to the mask positions in the aggregate word (Chapter 7-5 of Hacker's Delight)
+		std::array<uint64_t, 6> a;
+		m  = swapBitMask;
+		mk = ~m << 1;
+		for (uint32_t i = 0; i < 6; ++i){
+			mp   = mk ^ (mk << 1);
+			mp   = mp ^ (mp << 2);
+			mp   = mp ^ (mp << 4);
+			mp   = mp ^ (mp << 8);
+			mp   = mp ^ (mp << 16);
+			mp   = mp ^ (mp << 32);
+			mv   = mp & m;
+			a[i] = mv;
+			m    = (m ^ mv) | ( mv >> (1 << i) );
+			mk   = mk & ~mp;
+		}
+		aggregateBytes  = (aggregateBytes & ~a[5]) | ( (aggregateBytes << 32) & a[5] );
+		aggregateBytes  = (aggregateBytes & ~a[4]) | ( (aggregateBytes << 16) & a[4] );
+		aggregateBytes  = (aggregateBytes & ~a[3]) | ( (aggregateBytes << 8) & a[3] );
+		aggregateBytes  = (aggregateBytes & ~a[2]) | ( (aggregateBytes << 4) & a[2] );
+		aggregateBytes  = (aggregateBytes & ~a[1]) | ( (aggregateBytes << 2) & a[1] );
+		aggregateBytes  = (aggregateBytes & ~a[0]) | ( (aggregateBytes << 1) & a[0] );
+		aggregateBytes &= swapBitMask;
+		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
+		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
+		for (size_t iByte = 0; iByte < byteSize; ++iByte){
+			binLocus[ permByteInd[iByte] ] ^= (binLocus[ permByteInd[iByte] ] ^ aggregateByteArr[iByte]) & swapBitMaskArr[iByte];
 		}
 	}
+	// ADD THE LAST binLocus BYTE!!!!
 	auto time2 = std::chrono::high_resolution_clock::now();
-	permTime = time2 - time1;
+	permTime   = time2 - time1;
 	/*
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
@@ -263,11 +316,12 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 int main() {
 	BayesicSpace::RanDraw prng;
 	//const size_t nIndividuals    = 1200;
-	const size_t nIndividuals    = 125;
+	//const size_t nIndividuals    = 125;
+	const size_t nIndividuals    = 128;
 	//const size_t kSketches       = 100;
 	const size_t kSketches       = 20;
-	//const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
-	//const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
+	const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
+	const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
 	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
@@ -287,101 +341,17 @@ int main() {
 			binLocus2.push_back(bits[ii]);
 		}
 	}
-	binLocus2.back() = binLocus2.back() >> 3;
+	//binLocus2.back() = binLocus2.back() >> 3;
 	binLocus1        = binLocus2;
-	//
-	// Compress; corresponding intrinsic may be _pext_u64
-	//
-	uint64_t m{0};
-	auto m32     = reinterpret_cast<uint32_t *>(&m);
-	m32[0]       = 0b00010000'00100000'01000000'10000000;
-	m32[1]       = 0b00000001'00000010'00000100'00001000;
-	uint64_t mEx = m;
-	// Copy over for the intrinsic
-	uint64_t xi = _pext_u64(ranBits[0], m);
-	// The mask bits are from right to left
-	// The selected bits end up from left to right in the left-most byte
-	//
-	uint64_t mk = ~m << 1;
-	uint64_t mp{0};
-	uint64_t mv{0};
-	std::cout << "x:     " << std::bitset<8>(ranBits[0]) << " " << std::bitset<8>(ranBits[0] >> 8) << " " << std::bitset<8>(ranBits[0] >> 16) << " " << std::bitset<8>(ranBits[0] >> 24) << " " << std::bitset<8>(ranBits[0] >> 32) << 
-		" " << std::bitset<8>(ranBits[0] >> 40) << " " << std::bitset<8>(ranBits[0] >> 48) << " " << std::bitset<8>(ranBits[0] >> 56) << "\n";
-	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
-	uint64_t x = ranBits[0] & m;
-	std::cout << "x & m: " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
-		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
-	uint64_t t;
-	for (uint32_t i = 0; i < 6; ++i){
-		mp = mk ^ (mk << 1);
-		mp = mp ^ (mp << 2);
-		mp = mp ^ (mp << 4);
-		mp = mp ^ (mp << 8);
-		mp = mp ^ (mp << 16);
-		mp = mp ^ (mp << 32);
-		mv = mp & m;
-		m  = (m ^ mv) | ( mv >> (1 << i) );
-		t  = x & mv;
-		x  = (x ^ t) | ( t >> (1 << i) );
-		mk = mk & ~mp;
-	}
-	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
-		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
-	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
-	std::cout << "xi:    " << std::bitset<8>(xi) << " " << std::bitset<8>(xi >> 8) << " " << std::bitset<8>(xi >> 16) << " " << std::bitset<8>(xi >> 24) << " " << std::bitset<8>(xi >> 32) << 
-		" " << std::bitset<8>(xi >> 40) << " " << std::bitset<8>(xi >> 48) << " " << std::bitset<8>(xi >> 56) << "\n";
-	//
-	// Now do the expansion; corresponding intrinsic may be _pdep_u64
-	//
-	m = mEx;
-	std::cout << "m:     " << std::bitset<8>(m) << " " << std::bitset<8>(m >> 8) << " " << std::bitset<8>(m >> 16) << " " << std::bitset<8>(m >> 24) << " " << std::bitset<8>(m >> 32) << 
-		" " << std::bitset<8>(m >> 40) << " " << std::bitset<8>(m >> 48) << " " << std::bitset<8>(m >> 56) << "\n";
-	std::array<uint64_t, 6> a;
-	mk = ~m << 1;
-	for (uint32_t i = 0; i < 6; ++i){
-		mp   = mk ^ (mk << 1);
-		mp   = mp ^ (mp << 2);
-		mp   = mp ^ (mp << 4);
-		mp   = mp ^ (mp << 8);
-		mp   = mp ^ (mp << 16);
-		mp   = mp ^ (mp << 32);
-		mv   = mp & m;
-		a[i] = mv;
-		m    = (m ^ mv) | ( mv >> (1 << i) );
-		mk   = mk & ~mp;
-	}
-	x  = (x & ~a[5]) | ( (x << 32) & a[5] );
-	x  = (x & ~a[4]) | ( (x << 16) & a[4] );
-	x  = (x & ~a[3]) | ( (x << 8) & a[3] );
-	x  = (x & ~a[2]) | ( (x << 4) & a[2] );
-	x  = (x & ~a[1]) | ( (x << 2) & a[1] );
-	x  = (x & ~a[0]) | ( (x << 1) & a[0] );
-	x &= mEx;
-	std::cout << "x:     " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
-		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
-	x = _pdep_u64(xi, mEx);
-	std::cout << "xi:    " << std::bitset<8>(x) << " " << std::bitset<8>(x >> 8) << " " << std::bitset<8>(x >> 16) << " " << std::bitset<8>(x >> 24) << " " << std::bitset<8>(x >> 32) << 
-		" " << std::bitset<8>(x >> 40) << " " << std::bitset<8>(x >> 48) << " " << std::bitset<8>(x >> 56) << "\n";
-	//
-	// Exchange bits between bytes (need only one way)
-	//
-	uint8_t xb = 0b11111111;
-	uint8_t yb = 0b00000000;
-	uint8_t mb = 0b00100000;
-	std::cout << std::bitset<8>(xb) << "\n" << std::bitset<8>(yb) << "\n" << std::bitset<8>(mb) << "\n";
-	//const uint8_t tb = (xb ^ yb) & mb;
-	xb ^= (xb ^ yb) & mb;
-	//yb = yb ^ tb;
-	std::cout << std::bitset<8>(xb) << "\n" << std::bitset<8>(yb) << "\n";
-	//const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
-	//const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
+	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
+	//x = _pdep_u64(xi, mEx); Expand
+	const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
+	const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	for (size_t i = 0; i < binLocus1.size(); ++i){
-		//std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
-		std::cout << std::bitset<8>(binLocus1[i]) << " ";
+		std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
+		//std::cout << std::bitset<8>(binLocus1[i]) << " ";
 	}
 	std::cout << "\n";
-	//std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
+	std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
 }

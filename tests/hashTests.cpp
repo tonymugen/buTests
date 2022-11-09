@@ -33,6 +33,7 @@ uint32_t murMurHash(const size_t &key, const uint32_t &seed) {
 	uint32_t hash = seed;
 
 	// body
+	// TODO: change to memcpy; possible strict aliasing violation
 	auto blocks = reinterpret_cast<const uint32_t *>(&key);
 
 	for (size_t i = 0; i < sizeof(size_t) / sizeof(uint32_t); ++i){
@@ -166,53 +167,57 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 	std::chrono::duration<float, std::milli> sketchTime;
 	// Start with a permutation to make OPH
 	auto time1                   = std::chrono::high_resolution_clock::now();
-	const uint8_t byteSize       = 8;
-	const uint8_t oneBit         = 0b00000001;
+	constexpr uint8_t byteSize   = 8;
+	constexpr uint8_t oneBit     = 0b00000001;
 	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	// Deal with full bytes first
-	const size_t fullByteN = locusSize - static_cast<size_t>( nIndividuals - (nIndividuals & 0xfffffffffffffff8) );
-	size_t iIndiv          = 0;
+	// Round down to multiple on 8; nIndividuals - 1 because Fisher-Yates goes up to N - 2 inclusive
+	const size_t fullByteNind = (nIndividuals - 1) & 0xfffffffffffffff8;
+	size_t iIndiv             = 0;
+	size_t iByte              = 0;
 	std::array<size_t, 8> permByteInd;
 	std::array<size_t, 8> permInByteInd;
-	uint64_t aggregateBytes;
+	uint64_t bytesToSwap;
 	uint64_t swapBitMask;
-	auto aggregateByteArr = reinterpret_cast<uint8_t*>(&aggregateBytes);
-	auto swapBitMaskArr   = reinterpret_cast<uint8_t*>(&swapBitMask);
-	// NOT RIGHT! The bounds are wrong for bottom-up Fisher-Yates!!!
-	for (size_t iByte = 0; iByte < fullByteN; ++iByte){
+	std::array<uint8_t, byteSize> bytesToSwapArr;
+	std::array<uint8_t, byteSize> swapBitMaskArr;
+	while(iIndiv < fullByteNind){
 		// Aggregate bytes that contain bits that need to swapped
 		// with the bits in current byte into one 64-bit word.
 		// Add a mask that marks bits to be swapped with each byte
 		for (size_t iInByte = 0; iInByte < byteSize; ++iInByte){
-			const size_t perIndiv     = permutation[iIndiv++];                     // post-increment to use current value for index first
-			permByteInd[iInByte]      = perIndiv / byteSize;
-			permInByteInd[iInByte]    = perIndiv - (perIndiv & 0xfffffffffffffff8);
-			aggregateByteArr[iInByte] = binLocus[ permByteInd[iInByte] ];
-			swapBitMaskArr[iInByte]   = static_cast<uint8_t>(oneBit << permInByteInd[iInByte]);
+			const size_t perIndiv   = permutation[iIndiv++];                     // post-increment to use current value for index first
+			permByteInd[iInByte]    = perIndiv / byteSize;
+			permInByteInd[iInByte]  = perIndiv - (perIndiv & 0xfffffffffffffff8);
+			bytesToSwapArr[iInByte] = binLocus[ permByteInd[iInByte] ];
+			swapBitMaskArr[iInByte] = static_cast<uint8_t>(oneBit << permInByteInd[iInByte]);
 		}
 		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), byteSize);
+		memcpy(&swapBitMask, swapBitMaskArr.data(), byteSize);
 		uint64_t m  = swapBitMask;
 		uint64_t mk = ~swapBitMask << 1;
 		uint64_t mp;
 		uint64_t mv;
 		uint64_t t;
 		for (uint32_t i = 0; i < 6; ++i){
-			mp             = mk ^ (mk << 1);
-			mp             = mp ^ (mp << 2);
-			mp             = mp ^ (mp << 4);
-			mp             = mp ^ (mp << 8);
-			mp             = mp ^ (mp << 16);
-			mp             = mp ^ (mp << 32);
-			mv             = mp & m;
-			m              = (m ^ mv) | ( mv >> (1 << i) );
-			t              = aggregateBytes & mv;
-			aggregateBytes = (aggregateBytes ^ t) | ( t >> (1 << i) );
-			mk             = mk & ~mp;
+			mp          = mk ^ (mk << 1);
+			mp          = mp ^ (mp << 2);
+			mp          = mp ^ (mp << 4);
+			mp          = mp ^ (mp << 8);
+			mp          = mp ^ (mp << 16);
+			mp          = mp ^ (mp << 32);
+			mv          = mp & m;
+			m           = (m ^ mv) | ( mv >> (1 << i) );
+			t           = bytesToSwap & mv;
+			bytesToSwap = (bytesToSwap ^ t) | ( t >> (1 << i) );
+			mk          = mk & ~mp;
 		}
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, 1);
 		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
-		binLocus[iByte]     ^= aggregateByteArr[0]; 
-		aggregateByteArr[0] ^= binLocus[iByte];
-		binLocus[iByte]     ^= aggregateByteArr[0]; 
+		binLocus[iByte]   ^= bytesToSwapArr[0]; 
+		bytesToSwapArr[0] ^= binLocus[iByte];
+		binLocus[iByte]   ^= bytesToSwapArr[0]; 
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), 1);
 		// Now expand the bits swapped from the current binLocus byte to the mask positions in the aggregate word (Chapter 7-5 of Hacker's Delight)
 		std::array<uint64_t, 6> a;
 		m  = swapBitMask;
@@ -229,18 +234,20 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 			m    = (m ^ mv) | ( mv >> (1 << i) );
 			mk   = mk & ~mp;
 		}
-		aggregateBytes  = (aggregateBytes & ~a[5]) | ( (aggregateBytes << 32) & a[5] );
-		aggregateBytes  = (aggregateBytes & ~a[4]) | ( (aggregateBytes << 16) & a[4] );
-		aggregateBytes  = (aggregateBytes & ~a[3]) | ( (aggregateBytes << 8) & a[3] );
-		aggregateBytes  = (aggregateBytes & ~a[2]) | ( (aggregateBytes << 4) & a[2] );
-		aggregateBytes  = (aggregateBytes & ~a[1]) | ( (aggregateBytes << 2) & a[1] );
-		aggregateBytes  = (aggregateBytes & ~a[0]) | ( (aggregateBytes << 1) & a[0] );
-		aggregateBytes &= swapBitMask;
+		bytesToSwap  = (bytesToSwap & ~a[5]) | ( (bytesToSwap << 32) & a[5] );
+		bytesToSwap  = (bytesToSwap & ~a[4]) | ( (bytesToSwap << 16) & a[4] );
+		bytesToSwap  = (bytesToSwap & ~a[3]) | ( (bytesToSwap << 8) & a[3] );
+		bytesToSwap  = (bytesToSwap & ~a[2]) | ( (bytesToSwap << 4) & a[2] );
+		bytesToSwap  = (bytesToSwap & ~a[1]) | ( (bytesToSwap << 2) & a[1] );
+		bytesToSwap  = (bytesToSwap & ~a[0]) | ( (bytesToSwap << 1) & a[0] );
+		bytesToSwap &= swapBitMask;
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
 		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
 		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
 		for (size_t iByte = 0; iByte < byteSize; ++iByte){
-			binLocus[ permByteInd[iByte] ] ^= (binLocus[ permByteInd[iByte] ] ^ aggregateByteArr[iByte]) & swapBitMaskArr[iByte];
+			binLocus[ permByteInd[iByte] ] ^= (binLocus[ permByteInd[iByte] ] ^ bytesToSwapArr[iByte]) & swapBitMaskArr[iByte];
 		}
+		++iByte;
 	}
 	// ADD THE LAST binLocus BYTE!!!!
 	auto time2 = std::chrono::high_resolution_clock::now();
@@ -325,8 +332,12 @@ int main() {
 	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
-	std::vector<size_t> ranInts{prng.shuffleUintUp(nIndividuals)};
-	//std::vector<size_t> ranInts{prng.shuffleUintDown(nIndividuals)};
+	std::vector<size_t> ranIntsUp{prng.shuffleUintUp(nIndividuals)};
+	std::vector<size_t> ranIntsDown{prng.shuffleUintDown(nIndividuals)};
+	for (const auto ri : ranIntsDown){
+		std::cout << ri << " ";
+	}
+	std::cout << "\n";
 	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
 	std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
 	std::vector<uint8_t> binLocus1;
@@ -345,8 +356,8 @@ int main() {
 	binLocus1        = binLocus2;
 	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
 	//x = _pdep_u64(xi, mEx); Expand
-	const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus1, sketches1);
-	const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
+	const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsDown, seeds, prng, binLocus1, sketches1);
+	const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds, prng, binLocus2, sketches2);
 	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
 	for (size_t i = 0; i < binLocus1.size(); ++i){
 		std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";

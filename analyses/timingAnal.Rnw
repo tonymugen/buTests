@@ -55,7 +55,7 @@ In this document I analyze execution times of various \verb|vash| algorithm comp
 \section{(P)RNG timing}
 I start by benchmarking the various (P)RNG methods in C++. Initial \verb|perf| results suggested that random integer generation was a major hotspot. I read the results.
 <<>>=
-timeDT <- fread("./randomTiming.tsv")
+timeDT <- fread("./randomTimingOld.tsv")
 @
 I want fold difference from my implementation of the Mersenne Twister.
 <<>>=
@@ -81,13 +81,30 @@ ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FA
 cat("\\includegraphics{", pdfFlNam, "}\n\n", sep="")
 @
 \end{center}
-\section{OPH}
-I next analyze the two phases of OPH generation: bit permutation and hashing (index vector generation). Read the results.
+Try \verb|xoshiro256++|.
 <<>>=
-hashTimeDT <- fread("./hashTiming.tsv")
-hashTimeDT[, quantile(permutation/sketching, c(0.025, 0.25, 0.5, 0.75, 0.975))]
+timeDT <- fread("./randomTiming.tsv")
+timeDT <- melt(timeDT,
+	measure.vars = c("mnMT", "xoshiro256pp", "myMT", "stdMT"))
+timeDT[, .(median = median(value),
+			ci05 = quantile(value, 0.025),
+			ci95 = quantile(value, 0.975)),
+	by = variable]
 @
-Permutation takes more than twice the time. Will work on that.
+Plot.
+\begin{center}
+<<results=tex>>=
+pdfFlNam <- "prngTime.pdf"
+showtext_auto()
+ggplot(data = timeDT, aes(x = variable, y = value)) +
+	geom_boxplot(fill = "grey75") +
+	theme_classic(base_size = 18, base_family = "myriad") +
+	theme(strip.background=element_rect(fill="grey95", linetype="blank")) +
+	ylab("time, ms") + xlab("method")
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
 \end{document}
 
 

@@ -100,7 +100,8 @@ static inline uint64_t rotl(const uint64_t x, int k) {
 	return (x << k) | (x >> (64 - k));
 }
 
-static uint64_t s[4];
+//static uint64_t s[4];
+static std::array<uint64_t, 4> s;
 
 uint64_t next(void) {
 	const uint64_t result = rotl(s[0] + s[3], 23) + s[0];
@@ -120,42 +121,75 @@ uint64_t next(void) {
 }
 
 int main(){
-	std::chrono::duration<float, std::milli> xo256ppTime;
-	std::chrono::duration<float, std::milli> mtTime;
-	std::chrono::duration<float, std::milli> classTime;
-	std::chrono::duration<float, std::milli> stdTime;
-	std::array<uint64_t, 10000> res;
-	init_genrand64( __rdtsc() );
-	auto time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 9999; ++i){
-		res[i] = genrand64_int64();
+	std::chrono::duration<float, std::micro> xo256ppTime;
+	std::chrono::duration<float, std::micro> mtTime;
+	std::chrono::duration<float, std::micro> classTime;
+	std::chrono::duration<float, std::micro> stdTime;
+	std::chrono::duration<float, std::micro> xo256ppTimeS;
+	std::chrono::duration<float, std::micro> mtTimeS;
+	std::chrono::duration<float, std::micro> classTimeS;
+	std::chrono::duration<float, std::micro> stdTimeS;
+	std::array<uint64_t, 1000> res;
+	uint64_t x = __rdtsc();
+	BayesicSpace::RanDraw tstRan(x);
+	for (size_t si = 0; si < s.size(); ++si){
+		x         += 0x9e3779b97f4a7c15;
+		uint64_t z = x;
+		z          = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+		z          = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+		s[si]      = z;
 	}
-	auto time2 = std::chrono::high_resolution_clock::now();
-	mtTime     = time2 - time1;
+	std::cout << tstRan.ranInt() << " " << tstRan.ranInt() << " | " << next() << " " << next() << "\n";
+	std::mt19937_64 stdGen;
+	stdGen.seed( __rdtsc() );
+	init_genrand64( __rdtsc() );
+	/*
 	for (size_t i = 0; i < 4; ++i){
 		s[i] = __rdtsc();
 	}
+	*/
+	auto time1 = std::chrono::high_resolution_clock::now();
+	res[1] = genrand64_int64();
+	auto time2 = std::chrono::high_resolution_clock::now();
+	mtTimeS = time2 - time1;
 	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 9999; ++i){
+	res[1] = next();
+	time2 = std::chrono::high_resolution_clock::now();
+	xo256ppTimeS = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	res[1] = tstRan.ranInt();
+	time2 = std::chrono::high_resolution_clock::now();
+	classTimeS = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	res[1] = stdGen();
+	time2 = std::chrono::high_resolution_clock::now();
+	stdTimeS = time2 - time1;
+	std::cout << "single\t" << mtTimeS.count() << "\t" << xo256ppTimeS.count() << "\t" << classTimeS.count() << "\t" << stdTimeS.count() << "\n";
+	
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 1000; ++i){
+		res[i] = genrand64_int64();
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	mtTime     = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 1000; ++i){
 		res[i] = next();
 	}
 	time2       = std::chrono::high_resolution_clock::now();
 	xo256ppTime = time2 - time1;
-	BayesicSpace::RanDraw tstRan;
 	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 9999; ++i){
+	for (size_t i = 0; i < 1000; ++i){
 		res[i] = tstRan.ranInt();
 	}
 	time2     = std::chrono::high_resolution_clock::now();
 	classTime = time2 - time1;
-	std::mt19937_64 stdGen;
-	stdGen.seed( __rdtsc() );
 	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 9999; ++i){
+	for (size_t i = 0; i < 1000; ++i){
 		res[i] = stdGen();
 	}
 	time2   = std::chrono::high_resolution_clock::now();
 	stdTime = time2 - time1;
 	
-	std::cout << mtTime.count() << "\t" << xo256ppTime.count() << "\t" << classTime.count() << "\t" << stdTime.count() << "\n";
+	std::cout << "loop\t" << mtTime.count() / 1000.0 << "\t" << xo256ppTime.count() / 1000.0 << "\t" << classTime.count() / 1000.0 << "\t" << stdTime.count() / 1000.0 << "\n";
 }

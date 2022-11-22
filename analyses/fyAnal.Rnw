@@ -52,27 +52,25 @@ font_add("myriad", regular="MYRIADPRO-SEMIBOLD.OTF",
 sessionInfo()
 @
 \section{Correctness}
-Look at the distribution of samples from five integers, comparing the bottom-up and top-down algorithms.
+Look at the distribution of samples from 1000 integers, comparing the bottom-up and top-down algorithms.
 <<>>=
-up     <- table(scan("./fyTestUp.txt", what = character()))
-down   <- table(scan("./fyTestDown.txt", what = character()))
-distDT <- data.table(counts = c(up, down),
-				bins = c(names(up), names(down)),
-				algorithm = rep(c("up", "down"), each = length(up)))
-distDT
+#oneRun <- function(){
+#	fyPipe <- pipe("../build/fyTests")
+#	ivec   <- scan(fyPipe, what = integer(), quiet = TRUE)
+#	close(fyPipe)
+#	#res <- c(length(unique(ivec)), unique(ivec[duplicated(ivec)]))
+#	return(length(unique(ivec)))
+#}
+#fyVec <- replicate(1000, oneRun())
+#quantile(fyVec, c(0.025, 0.25, 0.5, 0.75, 0.975))
+#min(fyVec)
+#max(fyVec)
+#moduloRI <- scan("./moduloRanIntTable.txt", what = double())
+#round(moduloRI/1e9, 4)
+#mean(moduloRI[1:603]) - mean(moduloRI[604:2001])
+#t.test(moduloRI[1:603], moduloRI[604:2001])
+
 @
-\begin{center}
-<<results=tex>>=
-pdfFlNam <- "fyDist.pdf"
-showtext_auto()
-ggplot(data = distDT, aes(x = bins, y = counts, fill = algorithm)) +
-	geom_col(position = "dodge") +
-	theme_classic(base_size = 18, base_family = "myriad") +
-	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
-ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
-cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
-@
-\end{center}
 \section{Timing}
 Now compare execution times with and without branching.
 <<>>=
@@ -168,5 +166,25 @@ cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
 \end{center}
 \end{document}
 
+%<<>>=
+%up     <- table(scan("./fyTestUp.txt", what = character()))
+%down   <- table(scan("./fyTestDown.txt", what = character()))
+%distDT <- data.table(counts = c(up, down),
+%				bins = c(names(up), names(down)),
+%				algorithm = rep(c("up", "down"), each = length(up)))
+%distDT
+%@
+%\begin{center}
+%<<results=tex>>=
+%pdfFlNam <- "fyDist.pdf"
+%showtext_auto()
+%ggplot(data = distDT, aes(x = bins, y = counts, fill = algorithm)) +
+%	geom_col(position = "dodge") +
+%	theme_classic(base_size = 18, base_family = "myriad") +
+%	theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+%ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+%cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+%@
+%\end{center}
 
 

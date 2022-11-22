@@ -23,6 +23,7 @@
 #include <cmath>
 #include <immintrin.h>
 #include <random>
+#include <algorithm>
 
 #include "random.hpp"
 
@@ -192,4 +193,18 @@ int main(){
 	stdTime = time2 - time1;
 	
 	std::cout << "loop\t" << mtTime.count() / 1000.0 << "\t" << xo256ppTime.count() / 1000.0 << "\t" << classTime.count() / 1000.0 << "\t" << stdTime.count() / 1000.0 << "\n";
+	uint64_t max = 0;
+	uint64_t min = std::numeric_limits<uint64_t>::max();
+	for (size_t i = 0; i < 10000000000ULL; ++i){
+		//uint64_t r = tstRun.ranInt();
+		uint64_t r = stdGen();
+		max        = std::max(max, r);
+		min        = std::min(min, r);
+		/*
+		if ( tstRun.ranInt() >= 2*4294967295ULL ){
+			++sum32;
+		}
+		*/
+	}
+	std::cout << min << " " << max << "\n";
 }

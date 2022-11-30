@@ -31,25 +31,11 @@ uint64_t moduloInt(BayesicSpace::RanDraw &r, const uint64_t &max) { return r.ran
 uint64_t canonInt(BayesicSpace::RanDraw &r, const uint64_t &max) {
 	const __uint128_t max128 = static_cast<__uint128_t>(max);
 	const __uint128_t r0     = static_cast<__uint128_t>( r.ranInt() ) * max128;
-	const uint64_t r1Hi      = static_cast<uint64_t>( (static_cast<__uint128_t>( r.ranInt() ) * max128) >> 64 );
+	const __uint128_t r1Hi   = (static_cast<__uint128_t>( r.ranInt() ) * max128) >> 64;
 	const uint64_t r0Lo      = static_cast<uint64_t>(r0);
-	const uint64_t r0Hi      = static_cast<uint64_t>(r0 >> 64);
-	const uint64_t sumHi     = static_cast<uint64_t>( ( static_cast<__uint128_t>(r0Lo) + static_cast<__uint128_t>(r1Hi) ) >> 64 );
-	//sumHi                    = static_cast<uint64_t>( static_cast<__uint128_t>(r0Hi) + static_cast<__uint128_t>(sumHi) );
-	return static_cast<uint64_t>( static_cast<__uint128_t>(r0Hi) + static_cast<__uint128_t>(sumHi) );
-}
-
-uint64_t canonInt(std::mt19937_64 &r, const uint64_t &max) {
-	const __uint128_t max128 = static_cast<__uint128_t>(max);
-	const uint64_t v1        = r();
-	const __uint128_t r0     = static_cast<__uint128_t>(v1) * max128;
-	const uint64_t v2        = r();
-	const uint64_t r1Hi      = static_cast<uint64_t>( (static_cast<__uint128_t>(v2) * max128) >> 64 );
-	const uint64_t r0Lo      = static_cast<uint64_t>(r0);
-	const uint64_t r0Hi      = static_cast<uint64_t>(r0 >> 64);
-	const uint64_t sumHi     = static_cast<uint64_t>( ( static_cast<__uint128_t>(r0Lo) + static_cast<__uint128_t>(r1Hi) ) >> 64 );
-	//sumHi                    = static_cast<uint64_t>( static_cast<__uint128_t>(r0Hi) + static_cast<__uint128_t>(sumHi) );
-	return static_cast<uint64_t>( static_cast<__uint128_t>(r0Hi) + static_cast<__uint128_t>(sumHi) );
+	const __uint128_t r0Hi   = r0 >> 64;
+	const __uint128_t sumHi  = (static_cast<__uint128_t>(r0Lo) + r1Hi) >> 64;
+	return static_cast<uint64_t>(r0Hi + sumHi);
 }
 
 uint64_t lemireInt(BayesicSpace::RanDraw &r, const uint64_t &max){
@@ -68,60 +54,84 @@ uint64_t lemireInt(BayesicSpace::RanDraw &r, const uint64_t &max){
 	return static_cast<uint64_t>(m >> 64);
 }
 
-uint64_t lemireInt(std::mt19937_64 &r, const uint64_t &max){
-	uint64_t x    = r();
-	__uint128_t m = static_cast<__uint128_t>(x) * static_cast<__uint128_t>(max);
-	uint64_t l    = static_cast<uint64_t>(m);
-	if (l < max){
-		const uint64_t t = static_cast<uint64_t>(-max) % max;
-		while (l < t){
-			x = r();
-			m = static_cast<__uint128_t>(x) * static_cast<__uint128_t>(max);
-			l = static_cast<uint64_t>(m);
-		}
-	}
-
-	return static_cast<uint64_t>(m >> 64);
-}
-
-
 int main(){
 	BayesicSpace::RanDraw tstRun;
-	std::mt19937_64 stdGen;
-	stdGen.seed( tstRun.ranInt() );
 	//std::vector<uint64_t> res{tstRun.shuffleUintDown(1000)};
 	//std::vector<uint64_t> res{tstRun.shuffleUintUp(1000)};
+	std::chrono::duration<float, std::micro> moduloTime;
+	std::chrono::duration<float, std::micro> lemireTime;
+	std::chrono::duration<float, std::micro> canonTime;
 	/*
-	std::array<uint64_t, 2001> res{0};
-	for (size_t i = 0; i < 200100000000; ++i){
-		++res[tstRun.sampleInt(2001)];
-	}
-	for (const auto ir : res){
-		std::cout << ir << " ";
-	}
-	*/
-	//std::cout << canonInt(stdGen, 20) << "\n";
-	std::cout << canonInt(tstRun, 20) << "\n";
-	std::cout << lemireInt(tstRun, 20) << "\n";
-	//std::cout << lemireInt(stdGen, 20) << "\n";
-	/*
-	std::chrono::duration<float, std::milli> upTime;
-	std::chrono::duration<float, std::milli> downTime;
+	uint64_t lo = 0;
+	uint64_t hi = 0;
 	auto time1 = std::chrono::high_resolution_clock::now();
-	for (size_t l = 0; l < 50000; ++l){
-		std::vector<uint64_t> loc{tstRun.shuffleUintUp(1000)};
-		res.emplace_back(loc[0]);
+	for (size_t i = 0; i < 100000; ++i){
+		const uint64_t x = moduloInt(tstRun, 4294867296);
+		if (x <= 1410265407){
+			++lo;
+		} else {
+			++hi;
+		}
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
-	upTime = time2 - time1;
+	moduloTime = time2 - time1;
+	lo = 0;
+	hi = 0;
 	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t l = 0; l < 50000; ++l){
-		std::vector<uint64_t> loc{tstRun.shuffleUintDown(1000)};
-		res.emplace_back(loc[0]);
+	for (size_t i = 0; i < 100000; ++i){
+		const uint64_t x = lemireInt(tstRun, 4294867296);
+		if (x <= 1410265407){
+			++lo;
+		} else {
+			++hi;
+		}
 	}
 	time2 = std::chrono::high_resolution_clock::now();
-	downTime = time2 - time1;
-	std::cout << upTime.count() << "\tUp1000\tyes\n" << downTime.count() << "\tDown1000\tyes\n";
+	lemireTime = time2 - time1;
+	lo = 0;
+	hi = 0;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (size_t i = 0; i < 100000; ++i){
+		const uint64_t x = canonInt(tstRun, 4294867296);
+		if (x <= 1410265407){
+			++lo;
+		} else {
+			++hi;
+		}
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	canonTime = time2 - time1;
+	std::cout << moduloTime.count() * 1e-5 << "\tmodulo\n" << lemireTime.count() * 1e-5 << "\tlemire\n" << canonTime.count() * 1e-5 << "\tcanon\n";
 	*/
+	std::vector<uint64_t> out(100000);
+	std::iota(out.begin(), out.end(), 0);
+	auto time1 = std::chrono::high_resolution_clock::now();
+	for (uint64_t i = 99999; i > 0; --i){
+		uint64_t j = moduloInt(tstRun, i + 1);
+		out[i] ^= out[j];
+		out[j] ^= out[i];
+		out[i] ^= out[j];
+	}
+	auto time2 = std::chrono::high_resolution_clock::now();
+	moduloTime = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (uint64_t i = 99999; i > 0; --i){
+		uint64_t j = lemireInt(tstRun, i + 1);
+		out[i] ^= out[j];
+		out[j] ^= out[i];
+		out[i] ^= out[j];
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	lemireTime = time2 - time1;
+	time1 = std::chrono::high_resolution_clock::now();
+	for (uint64_t i = 99999; i > 0; --i){
+		uint64_t j = canonInt(tstRun, i + 1);
+		out[i] ^= out[j];
+		out[j] ^= out[i];
+		out[i] ^= out[j];
+	}
+	time2 = std::chrono::high_resolution_clock::now();
+	canonTime = time2 - time1;
+	std::cout << moduloTime.count() << "\tmodulo\n" << lemireTime.count() << "\tlemire\n" << canonTime.count() << "\tcanon\n";
 	return 0;
 }

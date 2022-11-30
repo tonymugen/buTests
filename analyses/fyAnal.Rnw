@@ -69,9 +69,41 @@ Look at the distribution of samples from 1000 integers, comparing the bottom-up 
 #round(moduloRI/1e9, 4)
 #mean(moduloRI[1:603]) - mean(moduloRI[604:2001])
 #t.test(moduloRI[1:603], moduloRI[604:2001])
-
+res <- scan(file = "./unifTestLemire.txt", what = integer())
+chisq.test(res)
+mean(res)
+res <- scan(file = "./unifTestCanon.txt", what = integer())
+chisq.test(res)
+mean(res)
 @
 \section{Timing}
+Compare execution times with a set (but very large, so it should often trigger the division in Lamire) maximum across three integer sampling schemes: regular modulo (biased), Lemire's nearly divisionless, and Canon's interesting no-division and no-branching trick.
+\begin{center}
+<<results=tex>>=
+samIntTime <- fread("./sampleIntTiming.tsv")
+pdfFlNam   <- "loopSampIntTime.pdf"
+showtext_auto()
+ggplot(data = samIntTime, aes(x = algorithm, y = time)) +
+	geom_boxplot(fill = "grey70") +
+	theme_classic(base_size = 18, base_family = "myriad")
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+My implementation of Canon's algorithm, at least, is slower that Lemire in this case. Now time Fisher-Yates using each random integer algorithm.
+\begin{center}
+<<results=tex>>=
+samIntTime <- fread("./fySintTiming.tsv")
+pdfFlNam   <- "fySampIntTime.pdf"
+showtext_auto()
+ggplot(data = samIntTime, aes(x = algorithm, y = time)) +
+	geom_boxplot(fill = "grey70") +
+	theme_classic(base_size = 18, base_family = "myriad")
+ggsave(pdfFlNam, width = 8, height = 6, units="in", device="pdf", useDingbats=FALSE)
+cat("\\includegraphics[width = 0.95\\textwidth]{", pdfFlNam, "}\n\n", sep="")
+@
+\end{center}
+In the Fisher-Yates application, we often sample with a small maximum, so Lemire is much faster than the competitors. Canon now better than modulo, but Lemire still wins, at least on my Intel processor.
 Now compare execution times with and without branching.
 <<>>=
 timeDT <- fread("./fyTiming.tsv")

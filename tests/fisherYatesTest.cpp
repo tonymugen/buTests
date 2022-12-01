@@ -29,6 +29,11 @@
 
 uint64_t moduloInt(BayesicSpace::RanDraw &r, const uint64_t &max) { return r.ranInt() % max; }
 uint64_t canonInt(BayesicSpace::RanDraw &r, const uint64_t &max) {
+	// This method is described in
+	// https://github.com/apple/swift/pull/39143
+	// https://jacquesheunis.com/post/bounded-random/
+	// A Swift implementation is in
+	// https://github.com/stephentyrone/swift/blob/played-for-absolute-fools/stdlib/public/core/Random.swift
 	const __uint128_t max128 = static_cast<__uint128_t>(max);
 	const __uint128_t r0     = static_cast<__uint128_t>( r.ranInt() ) * max128;
 	const __uint128_t r1Hi   = (static_cast<__uint128_t>( r.ranInt() ) * max128) >> 64;
@@ -103,6 +108,7 @@ int main(){
 	canonTime = time2 - time1;
 	std::cout << moduloTime.count() * 1e-5 << "\tmodulo\n" << lemireTime.count() * 1e-5 << "\tlemire\n" << canonTime.count() * 1e-5 << "\tcanon\n";
 	*/
+	std::cout << lemireInt(tstRun, 0) << "\n";
 	std::vector<uint64_t> out(100000);
 	std::iota(out.begin(), out.end(), 0);
 	auto time1 = std::chrono::high_resolution_clock::now();
@@ -133,5 +139,10 @@ int main(){
 	time2 = std::chrono::high_resolution_clock::now();
 	canonTime = time2 - time1;
 	std::cout << moduloTime.count() << "\tmodulo\n" << lemireTime.count() << "\tlemire\n" << canonTime.count() << "\tcanon\n";
+	BayesicSpace::RanDraw one(11);
+	BayesicSpace::RanDraw two(11);
+	for (size_t i = 0; i < 25; ++i){
+		std::cout << one.sampleInt(2001) << " " << lemireInt(two, 2001) << "\n";
+	}
 	return 0;
 }

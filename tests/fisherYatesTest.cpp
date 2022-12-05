@@ -18,12 +18,14 @@
  */
 
 #include <array>
+#include <numeric>
 #include <vector>
 #include <chrono>
 #include <iostream>
 #include <limits>
 #include <algorithm>
 #include <random>
+#include <iterator>
 
 #include "random.hpp"
 
@@ -61,88 +63,24 @@ uint64_t lemireInt(BayesicSpace::RanDraw &r, const uint64_t &max){
 
 int main(){
 	BayesicSpace::RanDraw tstRun;
-	//std::vector<uint64_t> res{tstRun.shuffleUintDown(1000)};
+	//std::vector<uint64_t> res{tstRun.shuffleUintDown(100)};
 	//std::vector<uint64_t> res{tstRun.shuffleUintUp(1000)};
-	std::chrono::duration<float, std::micro> moduloTime;
-	std::chrono::duration<float, std::micro> lemireTime;
-	std::chrono::duration<float, std::micro> canonTime;
-	/*
-	uint64_t lo = 0;
-	uint64_t hi = 0;
-	auto time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 100000; ++i){
-		const uint64_t x = moduloInt(tstRun, 4294867296);
-		if (x <= 1410265407){
-			++lo;
-		} else {
-			++hi;
+	constexpr size_t N = 23;
+	for (size_t k = 0; k < 10000000; ++k){
+		std::vector<size_t> perInd(N);
+		for (size_t i = N - 1; i > 0; --i){
+			perInd[i] = tstRun.sampleInt(i + 1);
 		}
-	}
-	auto time2 = std::chrono::high_resolution_clock::now();
-	moduloTime = time2 - time1;
-	lo = 0;
-	hi = 0;
-	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 100000; ++i){
-		const uint64_t x = lemireInt(tstRun, 4294867296);
-		if (x <= 1410265407){
-			++lo;
-		} else {
-			++hi;
+		std::vector<uint64_t> res(N);
+		std::iota(res.begin(), res.end(), 1);
+		auto resBegIt = res.begin();
+		for (size_t i = N - 1; i > 0; --i){
+			std::iter_swap(resBegIt + i, resBegIt + perInd[i]);
 		}
-	}
-	time2 = std::chrono::high_resolution_clock::now();
-	lemireTime = time2 - time1;
-	lo = 0;
-	hi = 0;
-	time1 = std::chrono::high_resolution_clock::now();
-	for (size_t i = 0; i < 100000; ++i){
-		const uint64_t x = canonInt(tstRun, 4294867296);
-		if (x <= 1410265407){
-			++lo;
-		} else {
-			++hi;
+		for (const auto ir : res){
+			std::cout << ir << " ";
 		}
-	}
-	time2 = std::chrono::high_resolution_clock::now();
-	canonTime = time2 - time1;
-	std::cout << moduloTime.count() * 1e-5 << "\tmodulo\n" << lemireTime.count() * 1e-5 << "\tlemire\n" << canonTime.count() * 1e-5 << "\tcanon\n";
-	*/
-	std::cout << lemireInt(tstRun, 0) << "\n";
-	std::vector<uint64_t> out(100000);
-	std::iota(out.begin(), out.end(), 0);
-	auto time1 = std::chrono::high_resolution_clock::now();
-	for (uint64_t i = 99999; i > 0; --i){
-		uint64_t j = moduloInt(tstRun, i + 1);
-		out[i] ^= out[j];
-		out[j] ^= out[i];
-		out[i] ^= out[j];
-	}
-	auto time2 = std::chrono::high_resolution_clock::now();
-	moduloTime = time2 - time1;
-	time1 = std::chrono::high_resolution_clock::now();
-	for (uint64_t i = 99999; i > 0; --i){
-		uint64_t j = lemireInt(tstRun, i + 1);
-		out[i] ^= out[j];
-		out[j] ^= out[i];
-		out[i] ^= out[j];
-	}
-	time2 = std::chrono::high_resolution_clock::now();
-	lemireTime = time2 - time1;
-	time1 = std::chrono::high_resolution_clock::now();
-	for (uint64_t i = 99999; i > 0; --i){
-		uint64_t j = canonInt(tstRun, i + 1);
-		out[i] ^= out[j];
-		out[j] ^= out[i];
-		out[i] ^= out[j];
-	}
-	time2 = std::chrono::high_resolution_clock::now();
-	canonTime = time2 - time1;
-	std::cout << moduloTime.count() << "\tmodulo\n" << lemireTime.count() << "\tlemire\n" << canonTime.count() << "\tcanon\n";
-	BayesicSpace::RanDraw one(11);
-	BayesicSpace::RanDraw two(11);
-	for (size_t i = 0; i < 25; ++i){
-		std::cout << one.sampleInt(2001) << " " << lemireInt(two, 2001) << "\n";
+		std::cout << "\n";
 	}
 	return 0;
 }

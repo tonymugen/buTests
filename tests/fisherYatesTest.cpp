@@ -67,15 +67,11 @@ int main(){
 	//std::vector<uint64_t> res{tstRun.shuffleUintUp(1000)};
 	constexpr size_t N = 23;
 	for (size_t k = 0; k < 10000000; ++k){
-		std::vector<size_t> perInd(N);
-		for (size_t i = N - 1; i > 0; --i){
-			perInd[i] = tstRun.sampleInt(i + 1);
-		}
+		std::vector<size_t> perInd{tstRun.fyIndexesUp(N)};
 		std::vector<uint64_t> res(N);
 		std::iota(res.begin(), res.end(), 1);
-		auto resBegIt = res.begin();
-		for (size_t i = N - 1; i > 0; --i){
-			std::iter_swap(resBegIt + i, resBegIt + perInd[i]);
+		for (size_t i = 0; i < N - 1; ++i){
+			std::swap(res[i], res[ perInd[i] ]);
 		}
 		for (const auto ir : res){
 			std::cout << ir << " ";

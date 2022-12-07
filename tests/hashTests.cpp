@@ -332,8 +332,8 @@ int main() {
 	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
-	std::vector<size_t> ranIntsUp{prng.shuffleUintUp(nIndividuals)};
-	std::vector<size_t> ranIntsDown{prng.shuffleUintDown(nIndividuals)};
+	std::vector<size_t> ranIntsUp{prng.fyIndexesUp(nIndividuals)};
+	std::vector<size_t> ranIntsDown{prng.fyIndexesDown(nIndividuals)};
 	for (const auto ri : ranIntsDown){
 		std::cout << ri << " ";
 	}

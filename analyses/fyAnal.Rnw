@@ -69,12 +69,14 @@ Look at the distribution of samples from 1000 integers, comparing the bottom-up 
 #round(moduloRI/1e9, 4)
 #mean(moduloRI[1:603]) - mean(moduloRI[604:2001])
 #t.test(moduloRI[1:603], moduloRI[604:2001])
-fyDown <- matrix(scan("./fyDownDist.txt", what = integer()), ncol = 23, byrow = TRUE)
+fyUp <- matrix(scan("./fyUpDist.txt", what = integer()), ncol = 23, byrow = TRUE)
+unique(apply(fyUp, 1, function(vec){length(unique(vec))}))
+apply(apply(fyUp, 1, range), 1, function(vec){length(unique(vec))})
 iChiSq <- function(vec){
 	res <- chisq.test(table(vec))
 	return(res$p.value)
 }
-chiSQp <- apply(fyDown, 2, iChiSq)
+chiSQp <- apply(fyUp, 2, iChiSq)
 round(chiSQp, 4)
 which.min(chiSQp)
 res <- scan(file = "./unifTestLemire.txt", what = integer())

@@ -65,112 +65,11 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	std::chrono::duration<float, std::milli> permTime;
 	std::chrono::duration<float, std::milli> sketchTime;
 	// Start with a permutation to make OPH
-	auto time1 = std::chrono::high_resolution_clock::now();
-	const uint8_t byteSize       = 8;
-	//const uint8_t oneBit         = 0b00000001;
-	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	size_t iIndiv                = nIndividuals - 1UL;
-	for (const auto &ri : permutation){
-		const uint16_t firstIdx = iIndiv % byteSize;
-		const size_t firstByte  = iIndiv / byteSize;
-		uint16_t secondIdx      = ri % byteSize;
-		const size_t secondByte = ri / byteSize;
-		const uint16_t diff     = byteSize * (firstByte != secondByte); // will be 0 if the same byte is being accessed; then need to swap bits within byte
-
-		// swapping bits within a two-byte variable
-		// using the method in https://graphics.stanford.edu/~seander/bithacks.html#SwappingBitsXOR
-		// if the same byte is being accessed, secondIdx is not shifted to the second byte
-		// This may be affected by endianness (did not test)
-		uint16_t twoBytes  = (static_cast<uint16_t>(binLocus[secondByte]) << 8) | ( static_cast<uint16_t>(binLocus[firstByte]) );
-		secondIdx         += diff;
-		uint16_t x         = ( (twoBytes >> firstIdx) ^ (twoBytes >> secondIdx) ) & 1;
-		twoBytes          ^= ( (x << firstIdx) | (x << secondIdx) );
-
-		memcpy( binLocus.data() + firstByte, &twoBytes, sizeof(uint8_t) );
-		twoBytes = twoBytes >> diff;
-		memcpy( binLocus.data() + secondByte, &twoBytes, sizeof(uint8_t) );
-		--iIndiv;
-	}
-	auto time2 = std::chrono::high_resolution_clock::now();
-	permTime = time2 - time1;
-	/*
-	// Now make the sketches
-	time1 = std::chrono::high_resolution_clock::now();
-	std::vector<size_t> filledIndexes;                // indexes of the non-empty sketches
-	size_t iByte     = 0;
-	size_t colEnd    = iByte + locusSize;
-	size_t sketchBeg = locusInd * kSketches;
-	size_t iSeed     = 0;                             // index into the seed vector
-	uint8_t iInByte  = 0;
-	// A possible optimization is to test a whole byte for 0
-	// Will test later
-	for (size_t iSketch = 0; iSketch < kSketches; ++iSketch){
-		uint16_t firstSetBitPos = 0;
-		while ( (iByte != colEnd) && ( ( (oneBit << iInByte) & binLocus[iByte] ) == 0 ) &&
-				(firstSetBitPos < sketchSize) ){
-			++iInByte;
-			// these are instead of an if statement
-			iByte  += iInByte == byteSize;
-			iInByte = iInByte % byteSize;
-			++firstSetBitPos;
-		}
-		if ( (iByte < colEnd) && (firstSetBitPos < sketchSize) ){
-			filledIndexes.push_back(iSketch);
-			{
-				// should be safe: each thread accesses different vector elements
-				sketches[sketchBeg + iSketch] = firstSetBitPos;
-			}
-
-			uint16_t remainder = sketchSize - firstSetBitPos;
-			uint16_t inByteMod = remainder % byteSize;
-			uint16_t inByteSum = iInByte + inByteMod;
-
-			iByte  += remainder / byteSize + inByteSum / byteSize;
-			iInByte = inByteSum % byteSize;
-		}
-	}
-	if (filledIndexes.size() == 1){
-		for (size_t iSk = 0; iSk < kSketches; ++iSk){ // this will overwrite the one assigned sketch, but the wasted operation should be swamped by the rest
-			// should be safe: each thread accesses different vector elements
-			sketches[sketchBeg + iSk] = sketches[filledIndexes[0] + sketchBeg];
-		}
-	} else if (filledIndexes.size() != kSketches){
-		if ( filledIndexes.empty() ){ // in the case where the whole locus is monomorphic, pick a random index as filled
-			filledIndexes.push_back( rng.sampleInt(kSketches) );
-		}
-		size_t emptyCount = kSketches - filledIndexes.size();
-		while (emptyCount){
-			for (const auto &f : filledIndexes){
-				uint32_t newIdx = murMurHash(f, seeds[iSeed]) % kSketches + sketchBeg;
-				// should be safe: each thread accesses different vector elements
-				if (sketches[newIdx] == emptyBinToken){
-					sketches[newIdx] = sketches[f + sketchBeg];
-					--emptyCount;
-					break;
-				}
-			}
-			++iSeed;
-			if ( iSeed == seeds.size() ){
-				seeds.push_back( static_cast<uint32_t>( rng.ranInt() ) );
-			}
-		}
-	}
-	time2      = std::chrono::high_resolution_clock::now();
-	*/
-	sketchTime = time2 - time1;
-	return std::array<float, 2>{permTime.count(), sketchTime.count()};
-}
-
-std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividuals, const size_t &locusSize, const size_t &kSketches, const size_t &sketchSize,
-	const std::vector<size_t> &permutation, std::vector<uint32_t> &seeds, BayesicSpace::RanDraw &rng, std::vector<uint8_t> &binLocus, std::vector<uint16_t> &sketches) {
-	std::chrono::duration<float, std::milli> permTime;
-	std::chrono::duration<float, std::milli> sketchTime;
-	// Start with a permutation to make OPH
 	auto time1                   = std::chrono::high_resolution_clock::now();
 	constexpr uint8_t byteSize   = 8;
 	constexpr uint8_t oneBit     = 0b00000001;
 	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	// Round down to multiple on 8; nIndividuals - 1 because Fisher-Yates goes up to N - 2 inclusive
+	// Round down to multiple of 8; nIndividuals - 1 because Fisher-Yates goes up to N - 2 inclusive
 	const size_t fullByteNind = (nIndividuals - 1) & 0xfffffffffffffff8;
 	size_t iIndiv             = 0;
 	size_t iByte              = 0;
@@ -244,8 +143,8 @@ std::array<float, 2> locusOPHnew(const size_t &locusInd, const size_t &nIndividu
 		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
 		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
 		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
-		for (size_t iByte = 0; iByte < byteSize; ++iByte){
-			binLocus[ permByteInd[iByte] ] ^= (binLocus[ permByteInd[iByte] ] ^ bytesToSwapArr[iByte]) & swapBitMaskArr[iByte];
+		for (size_t inByteInd = 0; inByteInd < byteSize; ++inByteInd){
+			binLocus[ permByteInd[inByteInd] ] ^= (binLocus[ permByteInd[inByteInd] ] ^ bytesToSwapArr[inByteInd]) & swapBitMaskArr[inByteInd];
 		}
 		++iByte;
 	}
@@ -333,36 +232,46 @@ int main() {
 	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
 	std::vector<size_t> ranIntsUp{prng.fyIndexesUp(nIndividuals)};
-	std::vector<size_t> ranIntsDown{prng.fyIndexesDown(nIndividuals)};
-	for (const auto ri : ranIntsDown){
-		std::cout << ri << " ";
-	}
-	std::cout << "\n";
-	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
-	std::vector<uint16_t> sketches2(kSketches, emptyBinToken);
-	std::vector<uint8_t> binLocus1;
-	std::vector<uint8_t> binLocus2;
+	std::vector<uint16_t> sketches(kSketches, emptyBinToken);
+	std::vector<uint8_t> binLocus;
 	std::vector<uint64_t> ranBits;
 	for (size_t i = 0; i < ranBitVecSize; ++i){
 		ranBits.push_back( prng.ranInt() );
 	}
+	std::bitset<ranBitVecSize * 64> ranBitBS{0};
+	for (size_t j = 0; j < ranBitVecSize; ++j){
+		for (size_t i = 0; i < 64; ++i){
+			const size_t ij = i + j * 64;
+			ranBitBS[ij] = (ranBits[j] >> ij) & static_cast<uint64_t>(1);
+		}
+	}
+	std::cout << ranBitBS << "\n";
+	for (size_t i = 0; i < nIndividuals - 1; ++i){
+		bool tmp = ranBitBS[i];
+		ranBitBS[i]              = ranBitBS[ ranIntsUp[i] ];
+		ranBitBS[ ranIntsUp[i] ] = tmp;
+	}
+	std::cout << ranBitBS << "\n";
+	//std::cout << std::bitset<64>(ranBits[1]) << std::bitset<64>(ranBits[0]) << "\n";
 	for (const auto rb : ranBits){
 		const auto bits = reinterpret_cast<const uint8_t *>(&rb);
 		for (size_t ii = 0; ii < sizeof(uint64_t); ++ii){
-			binLocus2.push_back(bits[ii]);
+			binLocus.push_back(bits[ii]);
 		}
 	}
-	//binLocus2.back() = binLocus2.back() >> 3;
-	binLocus1        = binLocus2;
-	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
-	//x = _pdep_u64(xi, mEx); Expand
-	const std::array<float, 2> res1 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsDown, seeds, prng, binLocus1, sketches1);
-	const std::array<float, 2> res2 = locusOPHnew(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds, prng, binLocus2, sketches2);
-	//const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranInts, seeds, prng, binLocus2, sketches2);
-	for (size_t i = 0; i < binLocus1.size(); ++i){
-		std::cout << std::bitset<8>(binLocus1[i] ^ binLocus2[i]) << " ";
-		//std::cout << std::bitset<8>(binLocus1[i]) << " ";
+	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
+		std::cout << std::bitset<8>(*blIt);
 	}
 	std::cout << "\n";
+	//binLocus2.back() = binLocus2.back() >> 3;
+	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
+	//x = _pdep_u64(xi, mEx); Expand
+	const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds, prng, binLocus, sketches);
+	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
+		std::cout << std::bitset<8>(*blIt);
+	}
+	std::cout << "\n";
+	/*
 	std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
+	*/
 }

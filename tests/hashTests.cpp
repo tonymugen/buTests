@@ -93,11 +93,13 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
 		memcpy(&bytesToSwap, bytesToSwapArr.data(), byteSize);
 		memcpy(&swapBitMask, swapBitMaskArr.data(), byteSize);
-		uint64_t m  = swapBitMask;
-		uint64_t mk = ~swapBitMask << 1;
+		//const uint64_t xi = _pext_u64(bytesToSwap, swapBitMask); // this is the intrinsic function that does the same thing
+		bytesToSwap &= swapBitMask;
+		uint64_t m   = swapBitMask;
+		uint64_t mk  = ~swapBitMask << 1;
 		uint64_t mp;
 		uint64_t mv;
-		uint64_t t;
+		uint64_t tmp;
 		for (uint32_t i = 0; i < 6; ++i){
 			mp          = mk ^ (mk << 1);
 			mp          = mp ^ (mp << 2);
@@ -107,12 +109,13 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			mp          = mp ^ (mp << 32);
 			mv          = mp & m;
 			m           = (m ^ mv) | ( mv >> (1 << i) );
-			t           = bytesToSwap & mv;
-			bytesToSwap = (bytesToSwap ^ t) | ( t >> (1 << i) );
+			tmp         = bytesToSwap & mv;
+			bytesToSwap = (bytesToSwap ^ tmp) | ( tmp >> (1 << i) );
 			mk          = mk & ~mp;
 		}
 		memcpy(bytesToSwapArr.data(), &bytesToSwap, 1);
 		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
+		// TODO: check if using a temp is faster
 		binLocus[iByte]   ^= bytesToSwapArr[0]; 
 		bytesToSwapArr[0] ^= binLocus[iByte];
 		binLocus[iByte]   ^= bytesToSwapArr[0]; 
@@ -148,7 +151,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		}
 		++iByte;
 	}
-	// ADD THE LAST binLocus BYTE!!!!
+	// TODO: ADD THE LAST binLocus BYTE!!!!
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
 	/*
@@ -238,6 +241,10 @@ int main() {
 	for (size_t i = 0; i < ranBitVecSize; ++i){
 		ranBits.push_back( prng.ranInt() );
 	}
+	for (const auto riu : ranIntsUp){
+		std::cout << riu << " ";
+	}
+	std::cout << "\n";
 	std::bitset<ranBitVecSize * 64> ranBitBS{0};
 	for (size_t j = 0; j < ranBitVecSize; ++j){
 		for (size_t i = 0; i < 64; ++i){
@@ -259,10 +266,12 @@ int main() {
 			binLocus.push_back(bits[ii]);
 		}
 	}
+	/*
 	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
 		std::cout << std::bitset<8>(*blIt);
 	}
 	std::cout << "\n";
+	*/
 	//binLocus2.back() = binLocus2.back() >> 3;
 	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
 	//x = _pdep_u64(xi, mEx); Expand

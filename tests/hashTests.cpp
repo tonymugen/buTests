@@ -145,13 +145,85 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		bytesToSwap &= swapBitMask;
 		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
 		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
+		// Order of operations is important!
 		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
 		for (size_t inByteInd = 0; inByteInd < byteSize; ++inByteInd){
 			binLocus[ permByteInd[inByteInd] ] ^= (binLocus[ permByteInd[inByteInd] ] ^ bytesToSwapArr[inByteInd]) & swapBitMaskArr[inByteInd];
 		}
 		++iByte;
 	}
-	// TODO: ADD THE LAST binLocus BYTE!!!!
+	if (iIndiv < nIndividuals - 1){
+		std::cout << "tail\n";
+		swapBitMaskArr.fill(0);
+		const size_t remainIndiv = nIndividuals - 1 - iIndiv;
+		for (size_t iRem = 0; iRem < remainIndiv; ++iRem){
+			const size_t perIndiv = permutation[iIndiv++];                     // post-increment to use current value for index first
+			permByteInd[iRem]     = perIndiv / byteSize;
+			permInByteInd[iRem]   = perIndiv - (perIndiv & 0xfffffffffffffff8);
+			bytesToSwapArr[iRem]  = binLocus[ permByteInd[iRem] ];
+			swapBitMaskArr[iRem]  = static_cast<uint8_t>(oneBit << permInByteInd[iRem]);
+		}
+		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), byteSize);
+		memcpy(&swapBitMask, swapBitMaskArr.data(), byteSize);
+		//const uint64_t xi = _pext_u64(bytesToSwap, swapBitMask); // this is the intrinsic function that does the same thing
+		bytesToSwap &= swapBitMask;
+		uint64_t m   = swapBitMask;
+		uint64_t mk  = ~swapBitMask << 1;
+		uint64_t mp;
+		uint64_t mv;
+		uint64_t tmp;
+		for (uint32_t i = 0; i < 6; ++i){
+			mp          = mk ^ (mk << 1);
+			mp          = mp ^ (mp << 2);
+			mp          = mp ^ (mp << 4);
+			mp          = mp ^ (mp << 8);
+			mp          = mp ^ (mp << 16);
+			mp          = mp ^ (mp << 32);
+			mv          = mp & m;
+			m           = (m ^ mv) | ( mv >> (1 << i) );
+			tmp         = bytesToSwap & mv;
+			bytesToSwap = (bytesToSwap ^ tmp) | ( tmp >> (1 << i) );
+			mk          = mk & ~mp;
+		}
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, 1);
+		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
+		// TODO: check if using a temp is faster
+		binLocus[iByte]   ^= bytesToSwapArr[0]; 
+		bytesToSwapArr[0] ^= binLocus[iByte];
+		binLocus[iByte]   ^= bytesToSwapArr[0]; 
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), 1);
+		// Now expand the bits swapped from the current binLocus byte to the mask positions in the aggregate word (Chapter 7-5 of Hacker's Delight)
+		std::array<uint64_t, 6> a;
+		m  = swapBitMask;
+		mk = ~m << 1;
+		for (uint32_t i = 0; i < 6; ++i){
+			mp   = mk ^ (mk << 1);
+			mp   = mp ^ (mp << 2);
+			mp   = mp ^ (mp << 4);
+			mp   = mp ^ (mp << 8);
+			mp   = mp ^ (mp << 16);
+			mp   = mp ^ (mp << 32);
+			mv   = mp & m;
+			a[i] = mv;
+			m    = (m ^ mv) | ( mv >> (1 << i) );
+			mk   = mk & ~mp;
+		}
+		bytesToSwap  = (bytesToSwap & ~a[5]) | ( (bytesToSwap << 32) & a[5] );
+		bytesToSwap  = (bytesToSwap & ~a[4]) | ( (bytesToSwap << 16) & a[4] );
+		bytesToSwap  = (bytesToSwap & ~a[3]) | ( (bytesToSwap << 8) & a[3] );
+		bytesToSwap  = (bytesToSwap & ~a[2]) | ( (bytesToSwap << 4) & a[2] );
+		bytesToSwap  = (bytesToSwap & ~a[1]) | ( (bytesToSwap << 2) & a[1] );
+		bytesToSwap  = (bytesToSwap & ~a[0]) | ( (bytesToSwap << 1) & a[0] );
+		bytesToSwap &= swapBitMask;
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
+		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
+		// Order of operations is important!
+		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
+		for (size_t inByteInd = 0; inByteInd < byteSize; ++inByteInd){
+			binLocus[ permByteInd[inByteInd] ] ^= (binLocus[ permByteInd[inByteInd] ] ^ bytesToSwapArr[inByteInd]) & swapBitMaskArr[inByteInd];
+		}
+	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
 	/*
@@ -226,7 +298,7 @@ int main() {
 	BayesicSpace::RanDraw prng;
 	//const size_t nIndividuals    = 1200;
 	//const size_t nIndividuals    = 125;
-	const size_t nIndividuals    = 128;
+	const size_t nIndividuals    = 129;
 	//const size_t kSketches       = 100;
 	const size_t kSketches       = 20;
 	const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);

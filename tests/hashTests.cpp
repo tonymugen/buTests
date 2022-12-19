@@ -296,15 +296,18 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 
 int main() {
 	BayesicSpace::RanDraw prng;
-	//const size_t nIndividuals    = 1200;
-	//const size_t nIndividuals    = 125;
-	const size_t nIndividuals    = 129;
-	//const size_t kSketches       = 100;
-	const size_t kSketches       = 20;
-	const size_t locusSize       = nIndividuals / 8 + static_cast<bool>(nIndividuals % 8);
-	const size_t sketchSize      = nIndividuals / kSketches + static_cast<bool>(nIndividuals % kSketches);
-	const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	const size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * 8) + static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * 8) );
+	constexpr size_t wordSizeBits    = 64;
+	constexpr size_t wordSize        = 8;
+	constexpr size_t byteSize        = 8;
+	//constexpr size_t nIndividuals    = 1200;
+	//constexpr size_t nIndividuals    = 125;
+	constexpr size_t nIndividuals    = 129;
+	//constexpr size_t kSketches       = 100;
+	constexpr size_t kSketches       = 20;
+	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );
+	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( static_cast<bool>(nIndividuals % kSketches) );
+	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
+	constexpr size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * byteSize) + static_cast<size_t>( static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * byteSize) ) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
 	std::vector<size_t> ranIntsUp{prng.fyIndexesUp(nIndividuals)};
 	std::vector<uint16_t> sketches(kSketches, emptyBinToken);
@@ -317,11 +320,11 @@ int main() {
 		std::cout << riu << " ";
 	}
 	std::cout << "\n";
-	std::bitset<ranBitVecSize * 64> ranBitBS{0};
+	std::bitset<ranBitVecSize * wordSizeBits> ranBitBS{0};
 	for (size_t j = 0; j < ranBitVecSize; ++j){
-		for (size_t i = 0; i < 64; ++i){
-			const size_t ij = i + j * 64;
-			ranBitBS[ij] = (ranBits[j] >> ij) & static_cast<uint64_t>(1);
+		for (size_t i = 0; i < wordSizeBits; ++i){
+			const size_t ijPair = i + j * wordSizeBits;
+			ranBitBS[ijPair] = static_cast<bool>( (ranBits[j] >> ijPair) & static_cast<uint64_t>(1) );
 		}
 	}
 	std::cout << ranBitBS << "\n";
@@ -333,8 +336,8 @@ int main() {
 	std::cout << ranBitBS << "\n";
 	//std::cout << std::bitset<64>(ranBits[1]) << std::bitset<64>(ranBits[0]) << "\n";
 	for (const auto rb : ranBits){
-		const auto bits = reinterpret_cast<const uint8_t *>(&rb);
-		for (size_t ii = 0; ii < sizeof(uint64_t); ++ii){
+		const auto *const bits = reinterpret_cast<const uint8_t *>(&rb);
+		for (size_t ii = 0; ii < wordSize; ++ii){
 			binLocus.push_back(bits[ii]);
 		}
 	}
@@ -349,7 +352,7 @@ int main() {
 	//x = _pdep_u64(xi, mEx); Expand
 	const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds, prng, binLocus, sketches);
 	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
-		std::cout << std::bitset<8>(*blIt);
+		std::cout << std::bitset<byteSize>(*blIt);
 	}
 	std::cout << "\n";
 	/*

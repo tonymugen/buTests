@@ -1,0 +1,22 @@
+Checks: "*,
+        -abseil-*,
+        -altera-*,
+        -android-*,
+		-boost-*,
+		-darwin-*,
+        -fuchsia-*,
+        -google-*,
+		-hicpp-*,
+		-linuxkernel-*,
+        -llvm*,
+        -modernize-use-trailing-return-type,
+		-mpi-*,
+		-objc-*,
+		-opnemp-*,
+        -zircon-*,
+        -readability-static-accessed-through-instance,
+        -readability-avoid-const-params-in-decls,
+"
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle:     none

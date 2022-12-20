@@ -79,7 +79,8 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	uint64_t swapBitMask;
 	std::array<uint8_t, byteSize> bytesToSwapArr;
 	std::array<uint8_t, byteSize> swapBitMaskArr;
-	while(iIndiv < fullByteNind){
+	while(iIndiv < 8){
+	//while(iIndiv < fullByteNind){
 		// Aggregate bytes that contain bits that need to swapped
 		// with the bits in current byte into one 64-bit word.
 		// Add a mask that marks bits to be swapped with each byte
@@ -152,7 +153,8 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		}
 		++iByte;
 	}
-	if (iIndiv < nIndividuals - 1){
+	if (false){
+	//if (iIndiv < nIndividuals - 1){
 		std::cout << "tail\n";
 		swapBitMaskArr.fill(0);
 		const size_t remainIndiv = nIndividuals - 1 - iIndiv;
@@ -307,7 +309,7 @@ int main() {
 	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );
 	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( static_cast<bool>(nIndividuals % kSketches) );
 	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	constexpr size_t ranBitVecSize   = nIndividuals / (sizeof(uint64_t) * byteSize) + static_cast<size_t>( static_cast<bool> ( nIndividuals % (sizeof(uint64_t) * byteSize) ) );
+	constexpr size_t ranBitVecSize   = nIndividuals / wordSizeBits + static_cast<size_t>( static_cast<bool> (nIndividuals % wordSizeBits) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
 	std::vector<size_t> ranIntsUp{prng.fyIndexesUp(nIndividuals)};
 	std::vector<uint16_t> sketches(kSketches, emptyBinToken);
@@ -320,38 +322,48 @@ int main() {
 		std::cout << riu << " ";
 	}
 	std::cout << "\n";
-	std::bitset<ranBitVecSize * wordSizeBits> ranBitBS{0};
+	std::bitset<nIndividuals> ranBitBS{0};
+	size_t iIndivdual = 0;
 	for (size_t j = 0; j < ranBitVecSize; ++j){
-		for (size_t i = 0; i < wordSizeBits; ++i){
-			const size_t ijPair = i + j * wordSizeBits;
-			ranBitBS[ijPair] = static_cast<bool>( (ranBits[j] >> ijPair) & static_cast<uint64_t>(1) );
+		for (size_t i = 0; (i < wordSizeBits) && (iIndivdual < nIndividuals); ++i){
+			ranBitBS[iIndivdual] = static_cast<bool>( (ranBits[j] >> i) & static_cast<uint64_t>(1) );
+			++iIndivdual;
 		}
 	}
 	std::cout << ranBitBS << "\n";
-	for (size_t i = 0; i < nIndividuals - 1; ++i){
-		bool tmp = ranBitBS[i];
+	for (size_t i = 0; i < byteSize; ++i){
+	//for (size_t i = 0; i < nIndividuals - 1; ++i){
+		const bool tmp           = ranBitBS[i];
 		ranBitBS[i]              = ranBitBS[ ranIntsUp[i] ];
 		ranBitBS[ ranIntsUp[i] ] = tmp;
 	}
-	std::cout << ranBitBS << "\n";
 	//std::cout << std::bitset<64>(ranBits[1]) << std::bitset<64>(ranBits[0]) << "\n";
-	for (const auto rb : ranBits){
-		const auto *const bits = reinterpret_cast<const uint8_t *>(&rb);
-		for (size_t ii = 0; ii < wordSize; ++ii){
-			binLocus.push_back(bits[ii]);
+	size_t iByte = 0;
+	binLocus.resize(locusSize);
+	for (const auto eachWord : ranBits){
+		for (size_t byteInWord = 0; (byteInWord < wordSize) && (iByte < locusSize); ++byteInWord){
+			binLocus[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) );
+			++iByte;
 		}
 	}
-	/*
-	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
-		std::cout << std::bitset<8>(*blIt);
+	const size_t remainder = byteSize - nIndividuals % byteSize;
+	binLocus.back() &= std::numeric_limits<uint8_t>::max() >> remainder;
+	auto blIt = binLocus.rbegin();
+	std::cout << std::bitset<nIndividuals % byteSize>(*blIt);
+	++blIt;
+	for (; blIt != binLocus.rend(); ++blIt){
+		std::cout << std::bitset<byteSize>(*blIt);
 	}
-	std::cout << "\n";
-	*/
+	std::cout << "\n\n";
 	//binLocus2.back() = binLocus2.back() >> 3;
 	//uint64_t xi = _pext_u64(ranBits[0], m); Compress
 	//x = _pdep_u64(xi, mEx); Expand
 	const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds, prng, binLocus, sketches);
-	for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
+	std::cout << ranBitBS << "\n";
+	blIt = binLocus.rbegin();
+	std::cout << std::bitset<nIndividuals % byteSize>(*blIt);
+	++blIt;
+	for (; blIt != binLocus.rend(); ++blIt){
 		std::cout << std::bitset<byteSize>(*blIt);
 	}
 	std::cout << "\n";

@@ -62,45 +62,51 @@ uint32_t murMurHash(const size_t &key, const uint32_t &seed) {
 
 std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals, const size_t &locusSize, const size_t &kSketches, const size_t &sketchSize,
 	const std::vector<size_t> &permutation, std::vector<uint32_t> &seeds, BayesicSpace::RanDraw &rng, std::vector<uint8_t> &binLocus, std::vector<uint16_t> &sketches) {
-	std::chrono::duration<float, std::milli> permTime;
-	std::chrono::duration<float, std::milli> sketchTime;
+	std::chrono::duration<float, std::milli> permTime{0};
+	std::chrono::duration<float, std::milli> sketchTime{0};
 	// Start with a permutation to make OPH
 	auto time1                   = std::chrono::high_resolution_clock::now();
 	constexpr uint8_t byteSize   = 8;
+	constexpr uint8_t wordSize   = 8;
 	constexpr uint8_t oneBit     = 0b00000001;
+	constexpr uint64_t roundMask = 0xfffffffffffffff8;
 	//const uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
 	// Round down to multiple of 8; nIndividuals - 1 because Fisher-Yates goes up to N - 2 inclusive
-	const size_t fullByteNind = (nIndividuals - 1) & 0xfffffffffffffff8;
+	const size_t fullByteNind = (nIndividuals - 1) & roundMask;
 	size_t iIndiv             = 0;
 	size_t iByte              = 0;
-	std::array<size_t, 8> permByteInd;
-	std::array<size_t, 8> permInByteInd;
-	uint64_t bytesToSwap;
-	uint64_t swapBitMask;
-	std::array<uint8_t, byteSize> bytesToSwapArr;
-	std::array<uint8_t, byteSize> swapBitMaskArr;
-	while(iIndiv < 8){
+	std::array<size_t, byteSize> permByteInd{0};
+	std::array<size_t, byteSize> permInByteInd{0};
+	uint64_t bytesToSwap{0};
+	uint64_t swapBitMask{0};
+	std::array<uint8_t, byteSize> bytesToSwapArr{0};
+	std::array<uint8_t, byteSize> swapBitMaskArr{0};
+	while(iIndiv < byteSize){
 	//while(iIndiv < fullByteNind){
 		// Aggregate bytes that contain bits that need to swapped
 		// with the bits in current byte into one 64-bit word.
 		// Add a mask that marks bits to be swapped with each byte
 		for (size_t iInByte = 0; iInByte < byteSize; ++iInByte){
-			const size_t perIndiv   = permutation[iIndiv++];                     // post-increment to use current value for index first
-			permByteInd[iInByte]    = perIndiv / byteSize;
-			permInByteInd[iInByte]  = perIndiv - (perIndiv & 0xfffffffffffffff8);
-			bytesToSwapArr[iInByte] = binLocus[ permByteInd[iInByte] ];
-			swapBitMaskArr[iInByte] = static_cast<uint8_t>(oneBit << permInByteInd[iInByte]);
+			const size_t perIndiv      = permutation[iIndiv++];                     // post-increment to use current value for index first
+			permByteInd.at(iInByte)    = perIndiv / byteSize;
+			permInByteInd.at(iInByte)  = perIndiv - (perIndiv & roundMask);
+			bytesToSwapArr.at(iInByte) = binLocus[permByteInd.at(iInByte)];
+			swapBitMaskArr.at(iInByte) = static_cast<uint8_t>( oneBit << permInByteInd.at(iInByte) );
 		}
+		for (const auto pbi : permByteInd){
+			std::cout << pbi << " ";
+		}
+		std::cout << "\b\n";
 		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
-		memcpy(&bytesToSwap, bytesToSwapArr.data(), byteSize);
-		memcpy(&swapBitMask, swapBitMaskArr.data(), byteSize);
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), wordSize);
+		memcpy(&swapBitMask, swapBitMaskArr.data(), wordSize);
 		//const uint64_t xi = _pext_u64(bytesToSwap, swapBitMask); // this is the intrinsic function that does the same thing
 		bytesToSwap &= swapBitMask;
 		uint64_t m   = swapBitMask;
 		uint64_t mk  = ~swapBitMask << 1;
-		uint64_t mp;
-		uint64_t mv;
-		uint64_t tmp;
+		uint64_t mp{0};
+		uint64_t mv{0};
+		uint64_t tmp{0};
 		for (uint32_t i = 0; i < 6; ++i){
 			mp          = mk ^ (mk << 1);
 			mp          = mp ^ (mp << 2);
@@ -114,28 +120,24 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			bytesToSwap = (bytesToSwap ^ tmp) | ( tmp >> (1 << i) );
 			mk          = mk & ~mp;
 		}
-		memcpy(bytesToSwapArr.data(), &bytesToSwap, 1);
-		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
-		// TODO: check if using a temp is faster
-		binLocus[iByte]   ^= bytesToSwapArr[0]; 
-		bytesToSwapArr[0] ^= binLocus[iByte];
-		binLocus[iByte]   ^= bytesToSwapArr[0]; 
-		memcpy(&bytesToSwap, bytesToSwapArr.data(), 1);
+		const uint8_t tmpByte = binLocus[iByte];
+		memcpy(&binLocus[iByte], &bytesToSwap, 1);
+		memcpy(&bytesToSwap, &tmpByte, 1);
 		// Now expand the bits swapped from the current binLocus byte to the mask positions in the aggregate word (Chapter 7-5 of Hacker's Delight)
-		std::array<uint64_t, 6> a;
+		std::array<uint64_t, 6> a{0};
 		m  = swapBitMask;
 		mk = ~m << 1;
-		for (uint32_t i = 0; i < 6; ++i){
-			mp   = mk ^ (mk << 1);
-			mp   = mp ^ (mp << 2);
-			mp   = mp ^ (mp << 4);
-			mp   = mp ^ (mp << 8);
-			mp   = mp ^ (mp << 16);
-			mp   = mp ^ (mp << 32);
-			mv   = mp & m;
-			a[i] = mv;
-			m    = (m ^ mv) | ( mv >> (1 << i) );
-			mk   = mk & ~mp;
+		for (uint32_t i = 0; i < a.size(); ++i){
+			mp      = mk ^ (mk << 1);
+			mp      = mp ^ (mp << 2);
+			mp      = mp ^ (mp << 4);
+			mp      = mp ^ (mp << 8);
+			mp      = mp ^ (mp << 16);
+			mp      = mp ^ (mp << 32);
+			mv      = mp & m;
+			a.at(i) = mv;
+			m       = (m ^ mv) | ( mv >> (1 << i) );
+			mk      = mk & ~mp;
 		}
 		bytesToSwap  = (bytesToSwap & ~a[5]) | ( (bytesToSwap << 32) & a[5] );
 		bytesToSwap  = (bytesToSwap & ~a[4]) | ( (bytesToSwap << 16) & a[4] );
@@ -144,12 +146,12 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		bytesToSwap  = (bytesToSwap & ~a[1]) | ( (bytesToSwap << 2) & a[1] );
 		bytesToSwap  = (bytesToSwap & ~a[0]) | ( (bytesToSwap << 1) & a[0] );
 		bytesToSwap &= swapBitMask;
-		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, wordSize);
 		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
 		// Order of operations is important!
 		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
 		for (size_t inByteInd = 0; inByteInd < byteSize; ++inByteInd){
-			binLocus[ permByteInd[inByteInd] ] ^= (binLocus[ permByteInd[inByteInd] ] ^ bytesToSwapArr[inByteInd]) & swapBitMaskArr[inByteInd];
+			binLocus[permByteInd.at(inByteInd)] ^= ( binLocus[permByteInd.at(inByteInd)] ^ bytesToSwapArr.at(inByteInd) ) & swapBitMaskArr.at(inByteInd);
 		}
 		++iByte;
 	}
@@ -159,22 +161,22 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		swapBitMaskArr.fill(0);
 		const size_t remainIndiv = nIndividuals - 1 - iIndiv;
 		for (size_t iRem = 0; iRem < remainIndiv; ++iRem){
-			const size_t perIndiv = permutation[iIndiv++];                     // post-increment to use current value for index first
-			permByteInd[iRem]     = perIndiv / byteSize;
-			permInByteInd[iRem]   = perIndiv - (perIndiv & 0xfffffffffffffff8);
-			bytesToSwapArr[iRem]  = binLocus[ permByteInd[iRem] ];
-			swapBitMaskArr[iRem]  = static_cast<uint8_t>(oneBit << permInByteInd[iRem]);
+			const size_t perIndiv    = permutation[iIndiv++];                     // post-increment to use current value for index first
+			permByteInd.at(iRem)     = perIndiv / byteSize;
+			permInByteInd.at(iRem)   = perIndiv - (perIndiv & roundMask);
+			bytesToSwapArr.at(iRem)  = binLocus[permByteInd.at(iRem)];
+			swapBitMaskArr.at(iRem)  = static_cast<uint8_t>( oneBit << permInByteInd.at(iRem) );
 		}
 		// Compress the bits corresponding to the set bits in the mask using PS-XOR (Chapter 7-4 of Hacker's Delight)
-		memcpy(&bytesToSwap, bytesToSwapArr.data(), byteSize);
-		memcpy(&swapBitMask, swapBitMaskArr.data(), byteSize);
+		memcpy(&bytesToSwap, bytesToSwapArr.data(), wordSize);
+		memcpy(&swapBitMask, swapBitMaskArr.data(), wordSize);
 		//const uint64_t xi = _pext_u64(bytesToSwap, swapBitMask); // this is the intrinsic function that does the same thing
 		bytesToSwap &= swapBitMask;
 		uint64_t m   = swapBitMask;
 		uint64_t mk  = ~swapBitMask << 1;
-		uint64_t mp;
-		uint64_t mv;
-		uint64_t tmp;
+		uint64_t mp{0};
+		uint64_t mv{0};
+		uint64_t tmp{0};
 		for (uint32_t i = 0; i < 6; ++i){
 			mp          = mk ^ (mk << 1);
 			mp          = mp ^ (mp << 2);
@@ -188,28 +190,24 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			bytesToSwap = (bytesToSwap ^ tmp) | ( tmp >> (1 << i) );
 			mk          = mk & ~mp;
 		}
-		memcpy(bytesToSwapArr.data(), &bytesToSwap, 1);
-		// Swap (using the three XOR method) the current binLocus byte with the byte of the aggregate where the masked bits are now stored
-		// TODO: check if using a temp is faster
-		binLocus[iByte]   ^= bytesToSwapArr[0]; 
-		bytesToSwapArr[0] ^= binLocus[iByte];
-		binLocus[iByte]   ^= bytesToSwapArr[0]; 
-		memcpy(&bytesToSwap, bytesToSwapArr.data(), 1);
+		const uint8_t tmpByte = binLocus[iByte];
+		memcpy(&binLocus[iByte], &bytesToSwap, 1);
+		memcpy(&bytesToSwap, &tmpByte, 1);
 		// Now expand the bits swapped from the current binLocus byte to the mask positions in the aggregate word (Chapter 7-5 of Hacker's Delight)
-		std::array<uint64_t, 6> a;
+		std::array<uint64_t, 6> a{0};
 		m  = swapBitMask;
 		mk = ~m << 1;
-		for (uint32_t i = 0; i < 6; ++i){
-			mp   = mk ^ (mk << 1);
-			mp   = mp ^ (mp << 2);
-			mp   = mp ^ (mp << 4);
-			mp   = mp ^ (mp << 8);
-			mp   = mp ^ (mp << 16);
-			mp   = mp ^ (mp << 32);
-			mv   = mp & m;
-			a[i] = mv;
-			m    = (m ^ mv) | ( mv >> (1 << i) );
-			mk   = mk & ~mp;
+		for (uint32_t i = 0; i < a.size(); ++i){
+			mp      = mk ^ (mk << 1);
+			mp      = mp ^ (mp << 2);
+			mp      = mp ^ (mp << 4);
+			mp      = mp ^ (mp << 8);
+			mp      = mp ^ (mp << 16);
+			mp      = mp ^ (mp << 32);
+			mv      = mp & m;
+			a.at(i) = mv;
+			m       = (m ^ mv) | ( mv >> (1 << i) );
+			mk      = mk & ~mp;
 		}
 		bytesToSwap  = (bytesToSwap & ~a[5]) | ( (bytesToSwap << 32) & a[5] );
 		bytesToSwap  = (bytesToSwap & ~a[4]) | ( (bytesToSwap << 16) & a[4] );
@@ -218,12 +216,12 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		bytesToSwap  = (bytesToSwap & ~a[1]) | ( (bytesToSwap << 2) & a[1] );
 		bytesToSwap  = (bytesToSwap & ~a[0]) | ( (bytesToSwap << 1) & a[0] );
 		bytesToSwap &= swapBitMask;
-		memcpy(bytesToSwapArr.data(), &bytesToSwap, byteSize);
+		memcpy(bytesToSwapArr.data(), &bytesToSwap, wordSize);
 		// Finally, replace the relevant bits in the binLocus bytes indexed by the permutation
 		// Order of operations is important!
 		// Chapter 2-20 of Hacker's Delight, but we do not need the full swap
 		for (size_t inByteInd = 0; inByteInd < byteSize; ++inByteInd){
-			binLocus[ permByteInd[inByteInd] ] ^= (binLocus[ permByteInd[inByteInd] ] ^ bytesToSwapArr[inByteInd]) & swapBitMaskArr[inByteInd];
+			binLocus[permByteInd.at(inByteInd)] ^= ( binLocus[permByteInd.at(inByteInd)] ^ bytesToSwapArr.at(inByteInd) ) & swapBitMaskArr.at(inByteInd);
 		}
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
@@ -312,6 +310,8 @@ int main() {
 	constexpr size_t ranBitVecSize   = nIndividuals / wordSizeBits + static_cast<size_t>( static_cast<bool> (nIndividuals % wordSizeBits) );
 	std::vector<uint32_t> seeds{static_cast<uint32_t>( prng.ranInt() )};
 	std::vector<size_t> ranIntsUp{prng.fyIndexesUp(nIndividuals)};
+	ranIntsUp[2] = 7;
+	ranIntsUp[4] = 6;
 	std::vector<uint16_t> sketches(kSketches, emptyBinToken);
 	std::vector<uint8_t> binLocus;
 	std::vector<uint64_t> ranBits;
@@ -331,7 +331,7 @@ int main() {
 		}
 	}
 	std::cout << ranBitBS << "\n";
-	for (size_t i = 0; i < byteSize; ++i){
+	for (size_t i = 0; i < 8; ++i){
 	//for (size_t i = 0; i < nIndividuals - 1; ++i){
 		const bool tmp           = ranBitBS[i];
 		ranBitBS[i]              = ranBitBS[ ranIntsUp[i] ];

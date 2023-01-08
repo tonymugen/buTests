@@ -69,22 +69,33 @@ Look at the distribution of samples from 1000 integers, comparing the bottom-up 
 #round(moduloRI/1e9, 4)
 #mean(moduloRI[1:603]) - mean(moduloRI[604:2001])
 #t.test(moduloRI[1:603], moduloRI[604:2001])
-fyUp <- matrix(scan("./fyUpDist.txt", what = integer()), ncol = 23, byrow = TRUE)
-unique(apply(fyUp, 1, function(vec){length(unique(vec))}))
-apply(apply(fyUp, 1, range), 1, function(vec){length(unique(vec))})
+#fyUp <- matrix(scan("./fyUpDist.txt", what = integer()), ncol = 23, byrow = TRUE)
+#unique(apply(fyUp, 1, function(vec){length(unique(vec))}))
+#apply(apply(fyUp, 1, range), 1, function(vec){length(unique(vec))})
 iChiSq <- function(vec){
 	res <- chisq.test(table(vec))
 	return(res$p.value)
 }
-chiSQp <- apply(fyUp, 2, iChiSq)
-round(chiSQp, 4)
-which.min(chiSQp)
+#chiSQp <- apply(fyUp, 2, iChiSq)
+#round(chiSQp, 4)
+#which.min(chiSQp)
 res <- scan(file = "./unifTestLemire.txt", what = integer())
 chisq.test(res)
 mean(res)
 res <- scan(file = "./unifTestCanon.txt", what = integer())
 chisq.test(res)
 mean(res)
+@
+Test the bit-wise output.
+<<>>=
+bitFY <- scan("./bitFY.txt", what = character(), sep = "\n")
+toInt <- function(char){
+	as.integer(unlist(strsplit(char, "")))
+}
+bitFY <- matrix(unlist(lapply(bitFY, toInt)), ncol = 128, byrow = TRUE)
+unique(rowSums(bitFY))
+colSums(bitFY[-1,])
+chisq.test(colSums(bitFY[-1,]))
 @
 \section{Timing}
 Compare execution times with a set (but very large, so it should often trigger the division in Lamire) maximum across three integer sampling schemes: regular modulo (biased), Lemire's nearly divisionless, and Canon's interesting no-division and no-branching trick.

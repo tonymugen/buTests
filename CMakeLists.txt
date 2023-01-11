@@ -23,8 +23,8 @@ else()
 	endif()
 endif()
 
-# -mbmi2 is for PEXT and PDEP
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -Wpedantic -Wshadow -mbmi2")
+# -mbmi2 is for PEXT and PDEP; -mbmi required for _tzcnt_u64()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wconversion -Wpedantic -Wshadow -mbmi2 -mlzcnt -mbmi")
 
 # tests of the RNG
 add_executable(randomTests

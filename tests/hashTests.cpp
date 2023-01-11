@@ -122,6 +122,7 @@ std::array<float, 2> locusOPHold(const size_t &locusInd, const size_t &nIndividu
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
+	binLocus[0] = 0;
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	std::vector<size_t> filledIndexes;                // indexes of the non-empty sketches
@@ -249,6 +250,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
+	binLocus[0] = 0;
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
@@ -262,10 +264,9 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	size_t iSketch   = 0;
 	while (iByte < nEvenBytesToHash){
 		uint64_t locusChunk = 0;
-		memcpy(&locusChunk, binLocus.data(), wordSize);
-		// TODO: add a cassert() for iSketch * sketchSize > wordSizeInBits
-		//  FIX!!!
-		const uint64_t initialShift = iSketch * sketchSize - wordSizeInBits;           // in case there is a trailing part of the previous sketch
+		memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
+		const uint64_t initialShift = (iSketch * sketchSize) % wordSizeInBits;           // in case there is a trailing part of the previous sketch
+		std::cout << "initial shift = " << initialShift << "\n";
 		std::cout << "X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		locusChunk                  = locusChunk >> initialShift;
 		std::cout << "X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
@@ -277,18 +278,19 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			locusChunk               = locusChunk >> iShift;
 			iSketch                 += idxToSkip;
 			filledIndexes.push_back(iSketch);
-			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit);             // should be safe: each thread accesses different vector elements
+			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 			++iSketch;
 			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		}
 		std::cout << "===========\n";
 		iByte += wordSize;
 	}
+	std::cout << "iByte = " << iByte << "\n";
 	if (iByte < nBytesToHash){
 		uint64_t locusChunk{0};
-		memcpy(&locusChunk, binLocus.data(), nBytesToHash - iByte);
-		// TODO: add a cassert() for iSketch * sketchSize > wordSizeInBits
-		const uint64_t initialShift = iSketch * sketchSize - wordSizeInBits;           // in case there is a trailing part of the previous sketch
+		memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
+		const uint64_t initialShift = (iSketch * sketchSize) % wordSizeInBits;           // in case there is a trailing part of the previous sketch
+		std::cout << "initial shift = " << initialShift << "\n";
 		std::cout << "X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		locusChunk                  = locusChunk >> initialShift;
 		std::cout << "0; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
@@ -300,7 +302,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			locusChunk               = locusChunk >> iShift;
 			iSketch                 += idxToSkip;
 			filledIndexes.push_back(iSketch);
-			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit);             // should be safe: each thread accesses different vector elements
+			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 			++iSketch;
 			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		}

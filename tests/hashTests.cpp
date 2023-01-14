@@ -122,9 +122,6 @@ std::array<float, 2> locusOPHold(const size_t &locusInd, const size_t &nIndividu
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
-	binLocus[0] = 0;
-	binLocus[1] = binLocus[1] & 0b11111100;
-	binLocus[7] = 0;
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	std::vector<size_t> filledIndexes;                // indexes of the non-empty sketches
@@ -252,9 +249,6 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	}
 	auto time2 = std::chrono::high_resolution_clock::now();
 	permTime   = time2 - time1;
-	binLocus[0] = 0;
-	binLocus[1] = binLocus[1] & 0b11111100;
-	binLocus[7] = 0;
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
@@ -274,34 +268,34 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
 		std::cout << "initial shift = " << initialShift << "\n";
 		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
+		if (carryOverZeros != 0){
+			uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
+			splitSketch = splitSketch << carryOverZeros;
+			std::cout << iSketch << "; T; " << std::bitset<byteSize * wordSize>(splitSketch) << "\n";
+			const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
+			std::cout << "lastSketch = " << lastSketch << "\n";
+			if (lastSketch < sketchSize){
+				const size_t prevIsketch{iSketch - 1};
+				filledIndexes.push_back(prevIsketch);
+				sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+			}
+		}
 		locusChunk   = locusChunk >> initialShift;
 		trackingMask = trackingMask >> initialShift;
 		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		std::cout << "X; X; " << std::bitset<wordSizeInBits>(trackingMask) << "\n\n";
 		uint64_t iShift{0};
-		trackingMask    = trackingMask >> iShift;
-		uint64_t setBit = _tzcnt_u64(locusChunk);                           // trailing zero count counts from the correct end
-		std::cout << iSketch << "; " << setBit << "; ";
-		std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-		std::cout << iSketch << "; " << setBit << "; ";
-		std::cout << std::bitset<wordSizeInBits>(trackingMask) << "\n\n";
-		uint64_t idxToSkip{setBit / sketchSize};
-		iShift       = sketchSize * (idxToSkip + 1);
-		locusChunk   = locusChunk >> iShift;
-		iSketch     += idxToSkip;
-		filledIndexes.push_back(iSketch);
-		sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize + carryOverZeros);             // should be safe: each thread accesses different vector elements
-		++iSketch;
+		uint64_t setBit{0};
 		while (locusChunk != 0){
-			trackingMask = trackingMask >> iShift;
 			setBit       = _tzcnt_u64(locusChunk);                           // trailing zero count counts from the correct end
 			std::cout << iSketch << "; " << setBit << "; ";
 			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 			std::cout << iSketch << "; " << setBit << "; ";
 			std::cout << std::bitset<wordSizeInBits>(trackingMask) << "\n\n";
-			idxToSkip    = setBit / sketchSize;
+			const uint64_t idxToSkip{setBit / sketchSize};
 			iShift       = sketchSize * (idxToSkip + 1);
 			locusChunk   = locusChunk >> iShift;
+			trackingMask = trackingMask >> iShift;
 			iSketch     += idxToSkip;
 			filledIndexes.push_back(iSketch);
 			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
@@ -311,26 +305,36 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		std::cout << std::bitset<wordSizeInBits>(~trackingMask) << "\n";
 		const uint64_t trailingSetBit{_tzcnt_u64(~trackingMask)};
 		const uint64_t trailingWholeSketches{trailingSetBit / sketchSize};
-		iSketch        += trailingWholeSketches;
 		carryOverZeros  = trailingSetBit % sketchSize;
-		initialShift    = sketchSize - carryOverZeros;
-		carryOverZeros *= static_cast<uint64_t>(trailingWholeSketches > 0);
-		std::cout << "iSketch = " << iSketch << "; trailingSetBit = " << trailingSetBit << "; carryOverZeros = " << carryOverZeros <<  "\n===========\n";
+		iSketch        += trailingWholeSketches + static_cast<uint64_t>(carryOverZeros > 0);
+		initialShift    = (sketchSize * iSketch) % wordSizeInBits;
+		std::cout << "iSketch = " << iSketch << "; last filled sketch = " << filledIndexes.back() << "; trailingSetBit = " << trailingSetBit;
+		std::cout  << "; carryOverZeros = " << carryOverZeros << "; iShift = " << iShift << "; setBit = " << setBit <<  "\n===========\n";
 		iByte += wordSize;
 	}
 	std::cout << "iByte = " << iByte << "\n";
 	if (iByte < nBytesToHash){
 		uint64_t locusChunk{0};
 		memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
-		uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
 		std::cout << "initial shift = " << initialShift << "\n";
 		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
+		if (carryOverZeros != 0){
+			constexpr uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
+			uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
+			splitSketch = splitSketch << carryOverZeros;
+			std::cout << iSketch << "; T; " << std::bitset<byteSize * wordSize>(splitSketch) << "\n";
+			const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
+			std::cout << "lastSketch = " << lastSketch << "\n";
+			if (lastSketch < sketchSize){
+				const size_t prevIsketch{iSketch - 1};
+				filledIndexes.push_back(prevIsketch);
+				sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+			}
+		}
 		locusChunk   = locusChunk >> initialShift;
-		trackingMask = trackingMask >> initialShift;
 		std::cout << iSketch << "; 0; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
 		uint64_t iShift{0};
 		while (locusChunk != 0){
-			trackingMask = trackingMask >> iShift;
 			const uint64_t setBit = _tzcnt_u64(locusChunk);                            // trailing zero count counts from the correct end
 			std::cout << setBit << "; ";
 			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
@@ -342,11 +346,6 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 			++iSketch;
 		}
-		std::cout << std::bitset<wordSizeInBits>(trackingMask) << "\n";
-		std::cout << std::bitset<wordSizeInBits>(~trackingMask) << "\n";
-		const uint64_t trailingSetBit = _tzcnt_u64(~trackingMask);
-		//iSketch += trailingSetBit / sketchSize;
-		std::cout << "iSketch = " << iSketch << "; trailingSetBit = " << trailingSetBit <<  "\n";
 	}
 	if (filledIndexes.size() == 1){
 		for (size_t iSk = 0; iSk < kSketches; ++iSk){ // this will overwrite the one assigned sketch, but the wasted operation should be swamped by the rest

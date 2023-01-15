@@ -251,100 +251,124 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	permTime   = time2 - time1;
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
-	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	const size_t nBytesToHash        = (kSketches * sketchSize) / byteSize;
-	const size_t nEvenBytesToHash    = nBytesToHash & roundMask;
-	std::cout << "nBytesToHash = " << nBytesToHash << "; nEvenBytesToHash = " << nEvenBytesToHash << "\n";
+	constexpr uint16_t emptyBinToken{std::numeric_limits<uint16_t>::max()};
+	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
+	const size_t nEvenBytesToHash{nBytesToHash & roundMask};
 	std::vector<size_t> filledIndexes;                                                 // indexes of the non-empty sketches
 	iByte = 0;
 	size_t sketchBeg{locusInd * kSketches};
 	size_t iSeed{0};                                                              // index into the seed vector
-	size_t iSketch{0};
-	uint64_t initialShift{0};
-	uint64_t carryOverZeros{0};
-	while (iByte < nEvenBytesToHash){
-		uint64_t locusChunk{0};
-		memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
-		uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
-		std::cout << "initial shift = " << initialShift << "\n";
-		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-		if (carryOverZeros != 0){
-			uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
-			splitSketch = splitSketch << carryOverZeros;
-			std::cout << iSketch << "; T; " << std::bitset<byteSize * wordSize>(splitSketch) << "\n";
-			const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
-			std::cout << "lastSketch = " << lastSketch << "\n";
-			if (lastSketch < sketchSize){
-				const size_t prevIsketch{iSketch - 1};
-				filledIndexes.push_back(prevIsketch);
-				sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+	if (sketchSize >= wordSizeInBits){
+		constexpr uint64_t maxShift{wordSizeInBits - 1};
+		constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
+		uint64_t initialShiftIncr{sketchSize % wordSizeInBits};
+		size_t iSketch{0};
+		bool lastWordUnset{false};
+		uint64_t wordPortion{wordSizeInBits};
+		while (iByte < nEvenBytesToHash){
+			const uint64_t initialShift = (initialShiftIncr * iSketch) % maxShift;
+			uint64_t locusChunk{0};
+			memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
+			if (lastWordUnset){
+				const uint64_t lastSketchTail{locusChunk | (allBitsSet << initialShift)};
+				const uint64_t setBit{_tzcnt_u64(lastSketchTail) + wordPortion};
+				if (setBit < sketchSize){
+					// TODO: add cassert() for iSketch > 0
+					filledIndexes.push_back(iSketch);
+					sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit);
+					++iSketch;
+				}
+			}
+			locusChunk = locusChunk >> initialShift;
+			const uint64_t trackingMask = ~(allBitsSet >> initialShift);
+			wordPortion = _tzcnt_u64(trackingMask);
+			const uint64_t setBit{_tzcnt_u64(locusChunk)};
+			if (setBit < wordPortion){
+				lastWordUnset = false;
+				filledIndexes.push_back(iSketch);
+				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit);
+				++iSketch;
+			} else {
+				lastWordUnset = true;
+			}
+			iByte += wordSize;
+		}
+		// do the last bytes if any (only if the beginning of the last hash is all 0)
+		if ( (iByte < nBytesToHash) && lastWordUnset ){
+			uint64_t locusChunk{0};
+			memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
+			const uint64_t setBit = _tzcnt_u64(locusChunk) + wordPortion;
+			if (setBit < sketchSize){
+				filledIndexes.push_back(iSketch);
+				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit);
 			}
 		}
-		locusChunk   = locusChunk >> initialShift;
-		trackingMask = trackingMask >> initialShift;
-		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-		std::cout << "X; X; " << std::bitset<wordSizeInBits>(trackingMask) << "\n\n";
-		uint64_t iShift{0};
-		uint64_t setBit{0};
-		while (locusChunk != 0){
-			setBit       = _tzcnt_u64(locusChunk);                           // trailing zero count counts from the correct end
-			std::cout << iSketch << "; " << setBit << "; ";
-			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-			std::cout << iSketch << "; " << setBit << "; ";
-			std::cout << std::bitset<wordSizeInBits>(trackingMask) << "\n\n";
-			const uint64_t idxToSkip{setBit / sketchSize};
-			iShift       = sketchSize * (idxToSkip + 1);
-			locusChunk   = locusChunk >> iShift;
-			trackingMask = trackingMask >> iShift;
-			iSketch     += idxToSkip;
-			filledIndexes.push_back(iSketch);
-			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
-			++iSketch;
-		}
-		std::cout << std::bitset<wordSizeInBits>(trackingMask) << "\n";
-		std::cout << std::bitset<wordSizeInBits>(~trackingMask) << "\n";
-		const uint64_t trailingSetBit{_tzcnt_u64(~trackingMask)};
-		const uint64_t trailingWholeSketches{trailingSetBit / sketchSize};
-		carryOverZeros  = trailingSetBit % sketchSize;
-		iSketch        += trailingWholeSketches + static_cast<uint64_t>(carryOverZeros > 0);
-		initialShift    = (sketchSize * iSketch) % wordSizeInBits;
-		std::cout << "iSketch = " << iSketch << "; last filled sketch = " << filledIndexes.back() << "; trailingSetBit = " << trailingSetBit;
-		std::cout  << "; carryOverZeros = " << carryOverZeros << "; iShift = " << iShift << "; setBit = " << setBit <<  "\n===========\n";
-		iByte += wordSize;
-	}
-	std::cout << "iByte = " << iByte << "\n";
-	if (iByte < nBytesToHash){
-		uint64_t locusChunk{0};
-		memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
-		std::cout << "initial shift = " << initialShift << "\n";
-		std::cout << iSketch << "; X; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-		if (carryOverZeros != 0){
-			constexpr uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
-			uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
-			splitSketch = splitSketch << carryOverZeros;
-			std::cout << iSketch << "; T; " << std::bitset<byteSize * wordSize>(splitSketch) << "\n";
-			const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
-			std::cout << "lastSketch = " << lastSketch << "\n";
-			if (lastSketch < sketchSize){
-				const size_t prevIsketch{iSketch - 1};
-				filledIndexes.push_back(prevIsketch);
-				sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+	} else {
+		size_t iSketch{0};
+		uint64_t initialShift{0};
+		uint64_t carryOverZeros{0};
+		while (iByte < nEvenBytesToHash){
+			uint64_t locusChunk{0};
+			memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
+			uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
+			if (carryOverZeros != 0){
+				uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
+				splitSketch = splitSketch << carryOverZeros;
+				const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
+				if (lastSketch < sketchSize){
+					const size_t prevIsketch{iSketch - 1};
+					filledIndexes.push_back(prevIsketch);
+					sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+				}
 			}
+			locusChunk   = locusChunk >> initialShift;
+			trackingMask = trackingMask >> initialShift;
+			uint64_t iShift{0};
+			uint64_t setBit{0};
+			while (locusChunk != 0){
+				setBit = _tzcnt_u64(locusChunk);                           // trailing zero count counts from the correct end
+				const uint64_t idxToSkip{setBit / sketchSize};
+				iShift = sketchSize * (idxToSkip + 1);
+				locusChunk   = locusChunk >> iShift;
+				trackingMask = trackingMask >> iShift;
+				iSketch     += idxToSkip;
+				filledIndexes.push_back(iSketch);
+				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
+				++iSketch;
+			}
+			const uint64_t trailingSetBit{_tzcnt_u64(~trackingMask)};
+			const uint64_t trailingWholeSketches{trailingSetBit / sketchSize};
+			carryOverZeros  = trailingSetBit % sketchSize;
+			iSketch        += trailingWholeSketches + static_cast<uint64_t>(carryOverZeros > 0);
+			initialShift    = (sketchSize * iSketch) % wordSizeInBits;
+			iByte          += wordSize;
 		}
-		locusChunk   = locusChunk >> initialShift;
-		std::cout << iSketch << "; 0; " << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-		uint64_t iShift{0};
-		while (locusChunk != 0){
-			const uint64_t setBit = _tzcnt_u64(locusChunk);                            // trailing zero count counts from the correct end
-			std::cout << setBit << "; ";
-			std::cout << std::bitset<byteSize * wordSize>(locusChunk) << "\n";
-			const uint64_t idxToSkip{setBit / sketchSize};
-			iShift     = sketchSize * (idxToSkip + 1);
-			locusChunk = locusChunk >> iShift;
-			iSketch   += idxToSkip;
-			filledIndexes.push_back(iSketch);
-			sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
-			++iSketch;
+		if (iByte < nBytesToHash){
+			uint64_t locusChunk{0};
+			memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
+			if (carryOverZeros != 0){
+				constexpr uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
+				uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
+				splitSketch = splitSketch << carryOverZeros;
+				const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
+				if (lastSketch < sketchSize){
+					const size_t prevIsketch{iSketch - 1};
+					filledIndexes.push_back(prevIsketch);
+					sketches[sketchBeg + prevIsketch] = static_cast<uint16_t>(lastSketch);
+				}
+			}
+			locusChunk   = locusChunk >> initialShift;
+			uint64_t iShift{0};
+			while (locusChunk != 0){
+				const uint64_t setBit{_tzcnt_u64(locusChunk)};                            // trailing zero count counts from the correct end
+				const uint64_t idxToSkip{setBit / sketchSize};
+				iShift     = sketchSize * (idxToSkip + 1);
+				locusChunk = locusChunk >> iShift;
+				iSketch   += idxToSkip;
+				filledIndexes.push_back(iSketch);
+				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
+				++iSketch;
+			}
 		}
 	}
 	if (filledIndexes.size() == 1){
@@ -386,11 +410,10 @@ int main() {
 	constexpr size_t wordSizeBits    = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
-	//constexpr size_t nIndividuals    = 1200;
+	constexpr size_t nIndividuals    = 1205;
 	//constexpr size_t nIndividuals    = 125;
-	constexpr size_t nIndividuals    = 200;
 	//constexpr size_t kSketches       = 100;
-	constexpr size_t kSketches       = 20;
+	constexpr size_t kSketches       = 40;
 	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );
 	constexpr size_t sketchSize      = nIndividuals / kSketches;
 	std::cout << sketchSize << "\n";

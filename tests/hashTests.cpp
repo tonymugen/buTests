@@ -259,14 +259,15 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	size_t sketchBeg{locusInd * kSketches};
 	size_t iSeed{0};                                                              // index into the seed vector
 	if (sketchSize >= wordSizeInBits){
-		constexpr uint64_t maxShift{wordSizeInBits - 1};
 		constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
 		uint64_t initialShiftIncr{sketchSize % wordSizeInBits};
 		size_t iSketch{0};
 		bool lastWordUnset{false};
 		uint64_t wordPortion{wordSizeInBits};
 		while (iByte < nEvenBytesToHash){
-			const uint64_t initialShift = (initialShiftIncr * iSketch) % maxShift;
+			std::cout << iSketch << "|" << static_cast<uint16_t>(lastWordUnset) << "|";
+			const uint64_t initialShift = (initialShiftIncr * iSketch) % wordSizeInBits;
+			std::cout << initialShift << "|";
 			uint64_t locusChunk{0};
 			memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
 			if (lastWordUnset){
@@ -283,6 +284,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			const uint64_t trackingMask = ~(allBitsSet >> initialShift);
 			wordPortion = _tzcnt_u64(trackingMask);
 			const uint64_t setBit{_tzcnt_u64(locusChunk)};
+			std::cout << setBit << " ";
 			if (setBit < wordPortion){
 				lastWordUnset = false;
 				filledIndexes.push_back(iSketch);
@@ -293,6 +295,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			}
 			iByte += wordSize;
 		}
+		std::cout << "\n";
 		// do the last bytes if any (only if the beginning of the last hash is all 0)
 		if ( (iByte < nBytesToHash) && lastWordUnset ){
 			uint64_t locusChunk{0};
@@ -328,10 +331,14 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			while (locusChunk != 0){
 				setBit = _tzcnt_u64(locusChunk);                           // trailing zero count counts from the correct end
 				const uint64_t idxToSkip{setBit / sketchSize};
-				iShift = sketchSize * (idxToSkip + 1);
+				iShift       = sketchSize * (idxToSkip + 1);
 				locusChunk   = locusChunk >> iShift;
 				trackingMask = trackingMask >> iShift;
-				iSketch     += idxToSkip;
+				// if iShift > 63, the shift result is undefined, but we want all 0
+				const auto finalFix = static_cast<uint64_t>( -static_cast<uint64_t>(iShift < wordSizeInBits) );
+				locusChunk         &= finalFix;
+				trackingMask       &= finalFix;
+				iSketch            += idxToSkip;
 				filledIndexes.push_back(iSketch);
 				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 				++iSketch;
@@ -364,7 +371,10 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 				const uint64_t idxToSkip{setBit / sketchSize};
 				iShift     = sketchSize * (idxToSkip + 1);
 				locusChunk = locusChunk >> iShift;
-				iSketch   += idxToSkip;
+				// if iShift > 63, the shift result is undefined, but we want all 0
+				const auto finalFix = static_cast<uint64_t>( -static_cast<uint64_t>(iShift < wordSizeInBits) );
+				locusChunk         &= finalFix;
+				iSketch            += idxToSkip;
 				filledIndexes.push_back(iSketch);
 				sketches[sketchBeg + iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 				++iSketch;
@@ -379,6 +389,9 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	} else if (filledIndexes.size() != kSketches){
 		if ( filledIndexes.empty() ){ // in the case where the whole locus is monomorphic, pick a random index as filled
 			filledIndexes.push_back( rng.sampleInt(kSketches) );
+		}
+		if (filledIndexes.size() > kSketches){
+			throw std::string("more filled than K");
 		}
 		size_t emptyCount = kSketches - filledIndexes.size();
 		while (emptyCount > 0){
@@ -410,10 +423,10 @@ int main() {
 	constexpr size_t wordSizeBits    = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
-	constexpr size_t nIndividuals    = 1205;
-	//constexpr size_t nIndividuals    = 125;
+	//constexpr size_t nIndividuals    = 1205;
+	constexpr size_t nIndividuals    = 1500;
 	//constexpr size_t kSketches       = 100;
-	constexpr size_t kSketches       = 40;
+	constexpr size_t kSketches       = 20;
 	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );
 	constexpr size_t sketchSize      = nIndividuals / kSketches;
 	std::cout << sketchSize << "\n";
@@ -433,7 +446,7 @@ int main() {
 	binLocus1.resize(locusSize);
 	for (const auto eachWord : ranBits){
 		for (size_t byteInWord = 0; (byteInWord < wordSize) && (iByte < locusSize); ++byteInWord){
-			binLocus1[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) );
+			binLocus1[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) ) & (static_cast<uint8_t>(1) << byteInWord);
 			++iByte;
 		}
 	}

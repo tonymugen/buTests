@@ -253,20 +253,55 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken{std::numeric_limits<uint16_t>::max()};
 	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
-	const size_t nEvenBytesToHash{nBytesToHash & roundMask};
+	const size_t tailBytesToHash{nBytesToHash % byteSize};
+	std::cout << "nBytesToHash = " << nBytesToHash << "\n";
 	std::vector<size_t> filledIndexes;                                                 // indexes of the non-empty sketches
 	iByte = 0;
 	size_t sketchBeg{locusInd * kSketches};
-	size_t iSeed{0};                                                              // index into the seed vector
+	constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
+	size_t iSketch{0};
+	uint64_t nWordUnsetBits{wordSizeInBits};
+	uint64_t nSumUnsetBits{0};
+	uint64_t initialShift{0};
+	while (iByte < nBytesToHash){
+		// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop condition
+		const size_t nRemainingWholeBytes = (nBytesToHash - iByte);
+		const size_t nRemainingWholeWords = nRemainingWholeBytes / wordSize;
+		const size_t locusChunkSize       = static_cast<size_t>(nRemainingWholeWords > 0) * wordSize + static_cast<size_t>(nRemainingWholeWords == 0) * tailBytesToHash;
+		// TODO: add cassert() wordSizeInBits > initialShift; must be true since initialShift < byteSize
+		size_t maxUnsetBits = wordSizeInBits - initialShift;
+		while ( (nWordUnsetBits == maxUnsetBits) && (iByte < nBytesToHash) ){
+			uint64_t locusChunk{0};
+			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
+			locusChunk     = locusChunk >> initialShift;
+			locusChunk    |= ~(allBitsSet >> initialShift);                            // shifting in 1 instead of 0 to limit unset bits to 64 - initialShift
+			nWordUnsetBits = _tzcnt_u64(locusChunk);
+			nSumUnsetBits += nWordUnsetBits;
+			maxUnsetBits   = wordSizeInBits;
+			initialShift   = 0;
+			iByte += locusChunkSize;
+		}
+		iSketch += nSumUnsetBits / sketchSize;
+		std::cout << iSketch << "|" << nWordUnsetBits << "|" << nSumUnsetBits << "|" << nSumUnsetBits % sketchSize << "|" << nRemainingWholeBytes << "|" << nRemainingWholeWords << "|" << locusChunkSize << "\n";
+		filledIndexes.push_back(iSketch);
+		sketches[sketchBeg + iSketch] = static_cast<uint16_t>(nSumUnsetBits % sketchSize);
+		++iSketch;
+		iByte        = (iSketch * sketchSize) / byteSize;
+		initialShift = (sketchSize * iSketch) % byteSize;
+	}
+	/*
 	if (sketchSize >= wordSizeInBits){
+		for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
+			std::cout << std::bitset<byteSize>(*blIt);
+		}
+		std::cout << "\n";
 		constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
-		uint64_t initialShiftIncr{sketchSize % wordSizeInBits};
 		size_t iSketch{0};
 		bool lastWordUnset{false};
 		uint64_t wordPortion{wordSizeInBits};
 		while (iByte < nEvenBytesToHash){
 			std::cout << iSketch << "|" << static_cast<uint16_t>(lastWordUnset) << "|";
-			const uint64_t initialShift = (initialShiftIncr * iSketch) % wordSizeInBits;
+			const uint64_t initialShift = (sketchSize * iSketch) % wordSizeInBits;
 			std::cout << initialShift << "|";
 			uint64_t locusChunk{0};
 			memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
@@ -381,6 +416,8 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			}
 		}
 	}
+	*/
+	size_t iSeed{0};                                                                   // index into the seed vector
 	if (filledIndexes.size() == 1){
 		for (size_t iSk = 0; iSk < kSketches; ++iSk){ // this will overwrite the one assigned sketch, but the wasted operation should be swamped by the rest
 			// should be safe: each thread accesses different vector elements

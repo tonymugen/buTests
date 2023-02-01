@@ -260,35 +260,41 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	size_t sketchBeg{locusInd * kSketches};
 	constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
 	size_t iSketch{0};
-	uint64_t nWordUnsetBits{wordSizeInBits};
-	uint64_t nSumUnsetBits{0};
-	uint64_t initialShift{0};
+	uint64_t sketchTail{0};                                                            // left over buts from beyond the last full byte of the previous sketch
+	size_t locusChunkSize = (wordSize > nBytesToHash ? nBytesToHash : wordSize);
 	while (iByte < nBytesToHash){
-		// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop condition
-		const size_t nRemainingWholeBytes = (nBytesToHash - iByte);
-		const size_t nRemainingWholeWords = nRemainingWholeBytes / wordSize;
-		const size_t locusChunkSize       = static_cast<size_t>(nRemainingWholeWords > 0) * wordSize + static_cast<size_t>(nRemainingWholeWords == 0) * tailBytesToHash;
-		// TODO: add cassert() wordSizeInBits > initialShift; must be true since initialShift < byteSize
-		size_t maxUnsetBits = wordSizeInBits - initialShift;
-		while ( (nWordUnsetBits == maxUnsetBits) && (iByte < nBytesToHash) ){
+		uint64_t nWordUnsetBits{wordSizeInBits};
+		uint64_t nSumUnsetBits{0};
+		while ( (nWordUnsetBits == wordSizeInBits) && (iByte < nBytesToHash) ){
 			uint64_t locusChunk{0};
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
-			locusChunk     = locusChunk >> initialShift;
-			locusChunk    |= ~(allBitsSet >> initialShift);                            // shifting in 1 instead of 0 to limit unset bits to 64 - initialShift
+			std::cout << std::bitset<wordSizeInBits>(locusChunk) << "\n";
+			locusChunk     &= allBitsSet << sketchTail;
+			std::cout << std::bitset<wordSizeInBits>(locusChunk) << "\n\n";
 			nWordUnsetBits = _tzcnt_u64(locusChunk);
-			nSumUnsetBits += nWordUnsetBits;
-			maxUnsetBits   = wordSizeInBits;
-			initialShift   = 0;
-			iByte += locusChunkSize;
+			nSumUnsetBits += nWordUnsetBits - sketchTail;
+			sketchTail     = 0;
+			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
+			// the following two lines must be before the iByte increment, otherwise we are subtracting before the test and may wrap
+			const size_t nRemainingWholeBytes{nBytesToHash - iByte};
+			const size_t nRemainingWholeWords{nRemainingWholeBytes / wordSize};
+			iByte         += locusChunkSize;
+			locusChunkSize = static_cast<size_t>(nRemainingWholeWords > 0) * wordSize + static_cast<size_t>(nRemainingWholeWords == 0) * tailBytesToHash;
 		}
 		iSketch += nSumUnsetBits / sketchSize;
-		std::cout << iSketch << "|" << nWordUnsetBits << "|" << nSumUnsetBits << "|" << nSumUnsetBits % sketchSize << "|" << nRemainingWholeBytes << "|" << nRemainingWholeWords << "|" << locusChunkSize << "\n";
+		std::cout << iSketch << "|" << nWordUnsetBits << "|" << nSumUnsetBits << "|" << nSumUnsetBits % sketchSize << "|" << locusChunkSize << "|";
 		filledIndexes.push_back(iSketch);
 		sketches[sketchBeg + iSketch] = static_cast<uint16_t>(nSumUnsetBits % sketchSize);
 		++iSketch;
-		iByte        = (iSketch * sketchSize) / byteSize;
-		initialShift = (sketchSize * iSketch) % byteSize;
+		const uint64_t bitsDone{iSketch * sketchSize};
+		iByte      = bitsDone / byteSize;
+		sketchTail = bitsDone % byteSize;
+		std::cout << iByte << "|" << sketchTail << "\n";
 	}
+	for (const auto flInd : filledIndexes){
+		std::cout << flInd << " ";
+	}
+	std::cout << "\n";
 	/*
 	if (sketchSize >= wordSizeInBits){
 		for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
@@ -461,7 +467,7 @@ int main() {
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
 	//constexpr size_t nIndividuals    = 1205;
-	constexpr size_t nIndividuals    = 1500;
+	constexpr size_t nIndividuals    = 150;
 	//constexpr size_t kSketches       = 100;
 	constexpr size_t kSketches       = 20;
 	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );

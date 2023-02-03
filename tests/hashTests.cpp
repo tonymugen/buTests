@@ -81,7 +81,7 @@ std::array<float, 2> locusOPHold(const size_t &locusInd, const size_t &nIndividu
 			auto bytePair            = static_cast<uint16_t>(binLocus[iByte]);
 			const size_t perIndiv    = permutation[iIndiv++];                                   // post-increment to use current value for index first
 			const size_t permByteInd = perIndiv / byteSize;
-			const auto permInByteInd = static_cast<uint8_t>( perIndiv - (perIndiv & roundMask) );
+			const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
 			// Pair the current locus byte with the byte containing the value to be swapped
 			// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
 			bytePair                    |= static_cast<uint16_t>(binLocus[permByteInd]) << byteSize;
@@ -104,7 +104,7 @@ std::array<float, 2> locusOPHold(const size_t &locusInd, const size_t &nIndividu
 		auto bytePair            = static_cast<uint16_t>(binLocus[iByte]);
 		const size_t perIndiv    = permutation[iIndiv++];                                   // post-increment to use current value for index first
 		const size_t permByteInd = perIndiv / byteSize;
-		const auto permInByteInd = static_cast<uint8_t>( perIndiv - (perIndiv & roundMask) );
+		const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
 		// Pair the current locus byte with the byte containing the value to be swapped
 		// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
 		bytePair                    |= static_cast<uint16_t>(binLocus[permByteInd]) << byteSize;
@@ -208,7 +208,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			auto bytePair            = static_cast<uint16_t>(binLocus[iByte]);
 			const size_t perIndiv    = permutation[iIndiv++];                                   // post-increment to use current value for index first
 			const size_t permByteInd = perIndiv / byteSize;
-			const auto permInByteInd = static_cast<uint8_t>( perIndiv - (perIndiv & roundMask) );
+			const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
 			// Pair the current locus byte with the byte containing the value to be swapped
 			// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
 			bytePair                    |= static_cast<uint16_t>(binLocus[permByteInd]) << byteSize;
@@ -231,7 +231,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		auto bytePair            = static_cast<uint16_t>(binLocus[iByte]);
 		const size_t perIndiv    = permutation[iIndiv++];                                   // post-increment to use current value for index first
 		const size_t permByteInd = perIndiv / byteSize;
-		const auto permInByteInd = static_cast<uint8_t>( perIndiv - (perIndiv & roundMask) );
+		const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
 		// Pair the current locus byte with the byte containing the value to be swapped
 		// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
 		bytePair                    |= static_cast<uint16_t>(binLocus[permByteInd]) << byteSize;
@@ -253,7 +253,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken{std::numeric_limits<uint16_t>::max()};
 	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
-	const size_t tailBytesToHash{nBytesToHash % byteSize};
+	const size_t tailBytesToHash{nBytesToHash % wordSize};
 	std::cout << "nBytesToHash = " << nBytesToHash << "\n";
 	std::vector<size_t> filledIndexes;                                                 // indexes of the non-empty sketches
 	iByte = 0;
@@ -266,7 +266,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		uint64_t nWordUnsetBits{wordSizeInBits};
 		uint64_t nSumUnsetBits{0};
 		while ( (nWordUnsetBits == wordSizeInBits) && (iByte < nBytesToHash) ){
-			uint64_t locusChunk{0};
+			uint64_t locusChunk{allBitsSet};
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
 			std::cout << std::bitset<wordSizeInBits>(locusChunk) << "\n";
 			locusChunk     &= allBitsSet << sketchTail;
@@ -460,21 +460,21 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 
 int main() {
 	BayesicSpace::RanDraw seedPRNG;
-	const uint64_t seedInt  = seedPRNG.ranInt();
+	const uint64_t seedInt{seedPRNG.ranInt()};
 	BayesicSpace::RanDraw prng1(seedInt);
 	BayesicSpace::RanDraw prng2(seedInt);
-	constexpr size_t wordSizeBits    = 64;
+	constexpr uint64_t roundMask     = 0xfffffffffffffff8;
+	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
+	constexpr size_t wordSizeInBits  = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
-	//constexpr size_t nIndividuals    = 1205;
-	constexpr size_t nIndividuals    = 150;
-	//constexpr size_t kSketches       = 100;
-	constexpr size_t kSketches       = 20;
-	constexpr size_t locusSize       = nIndividuals / byteSize + static_cast<size_t>( static_cast<bool>(nIndividuals % byteSize) );
-	constexpr size_t sketchSize      = nIndividuals / kSketches;
-	std::cout << sketchSize << "\n";
-	constexpr uint16_t emptyBinToken = std::numeric_limits<uint16_t>::max();
-	constexpr size_t ranBitVecSize   = nIndividuals / wordSizeBits + static_cast<size_t>( static_cast<bool> (nIndividuals % wordSizeBits) );
+	constexpr size_t nIndividuals    = 155;
+	constexpr size_t kSketches       = 23;
+	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( (nIndividuals % kSketches) > 0 );
+	constexpr size_t nIndivToHash    = sketchSize * kSketches;                                                   // round up to the nearest divisible by kSketches number
+	constexpr size_t locusSize       = ( ( nIndivToHash + (byteSize - 1) ) & roundMask ) / byteSize;             // round up the nIndivToHash to the nearest multiple of 8
+	constexpr size_t ranBitVecSize   = nIndivToHash / wordSizeInBits + static_cast<size_t>( (nIndivToHash % wordSizeInBits) > 0 );
+	std::cout << sketchSize << "; " << nIndivToHash << "; " << locusSize <<"\n";
 	std::vector<uint32_t> seeds1{static_cast<uint32_t>( prng1.ranInt() )};
 	std::vector<uint32_t> seeds2{static_cast<uint32_t>( prng2.ranInt() )};
 	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
@@ -493,6 +493,38 @@ int main() {
 			++iByte;
 		}
 	}
+	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
+		std::cout << std::bitset<byteSize>(*blIt);
+	}
+	std::cout << "\n";
+	// pad out the extra individuals by randomly sampling from the given set
+	for (size_t iAddIndiv = nIndividuals; iAddIndiv < nIndivToHash; ++iAddIndiv){
+		const size_t iLocByte    = iAddIndiv / byteSize;
+		const auto iInLocByte    = static_cast<uint8_t>(iAddIndiv % byteSize);
+		auto bytePair            = static_cast<uint16_t>(binLocus1[iLocByte]);
+		const size_t perIndiv    = seedPRNG.sampleInt(nIndividuals);                                   // post-increment to use current value for index first
+		const size_t permByteInd = perIndiv / byteSize;
+		const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
+		std::cout << perIndiv << " ";
+		// Pair the current locus byte with the byte containing the value to be swapped
+		// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
+		bytePair                    |= static_cast<uint16_t>(binLocus1[permByteInd]) << byteSize;
+		const auto mask              = static_cast<uint16_t>(1 << iInLocByte);
+		const auto perMask           = static_cast<uint8_t>(1 << permInByteInd);
+		const uint16_t shiftDistance = (byteSize - iInLocByte) + permInByteInd;           // subtraction is safe b/c byteSize is the loop terminator
+		const uint16_t temp1         = ( bytePair ^ (bytePair >> shiftDistance) ) & mask;
+		const auto temp2             = static_cast<uint16_t>(temp1 << shiftDistance);
+		bytePair                    ^= temp1 ^ temp2;
+		// Transfer bits using the trick in Hacker's Delight Chapter 2-20 (do not need the full swap, just transfer from the byte pair to binLocus1)
+		// Must modify the current byte in each loop iteration because permutation indexes may fall into it
+		binLocus1[permByteInd]       ^= ( binLocus1[permByteInd] ^ static_cast<uint8_t>(bytePair >> byteSize) ) & perMask;
+	}
+	std::cout << "\n";
+	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
+		std::cout << std::bitset<byteSize>(*blIt);
+	}
+	std::cout << "\n";
+	binLocus1.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
 	binLocus2 = binLocus1;
 	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
 		std::cout << std::bitset<byteSize>(*blIt);

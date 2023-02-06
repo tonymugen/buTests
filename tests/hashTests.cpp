@@ -197,7 +197,6 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	constexpr uint8_t byteSize      = 8;
 	constexpr size_t wordSize       = 8;
 	constexpr uint16_t oneBit       = 1;
-	constexpr uint64_t roundMask    = 0xfffffffffffffff8;
 	constexpr size_t wordSizeInBits = 64;
 	// Calculate the number of full bytes; nIndividuals - 1 because Fisher-Yates goes up to N - 2 inclusive
 	const size_t nFullBytes = (nIndividuals - 1) / byteSize;
@@ -253,8 +252,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken{std::numeric_limits<uint16_t>::max()};
 	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
-	const size_t tailBytesToHash{nBytesToHash % wordSize};
-	std::cout << "nBytesToHash = " << nBytesToHash << "\n";
+	const size_t nBytesToHashP1 = nBytesToHash + 1;                                    // for remaining byte number calculation
 	std::vector<size_t> filledIndexes;                                                 // indexes of the non-empty sketches
 	iByte = 0;
 	size_t sketchBeg{locusInd * kSketches};
@@ -267,29 +265,27 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		uint64_t nSumUnsetBits{0};
 		while ( (nWordUnsetBits == wordSizeInBits) && (iByte < nBytesToHash) ){
 			uint64_t locusChunk{allBitsSet};
+			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
+			const size_t nRemainingBytes{nBytesToHashP1 - iByte};
+			locusChunkSize = static_cast<size_t>(nRemainingBytes >= wordSize) * wordSize + static_cast<size_t>(nRemainingBytes < wordSize) * nRemainingBytes;
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
-			std::cout << std::bitset<wordSizeInBits>(locusChunk) << "\n";
-			locusChunk     &= allBitsSet << sketchTail;
-			std::cout << std::bitset<wordSizeInBits>(locusChunk) << "\n\n";
+			locusChunk    &= allBitsSet << sketchTail;
 			nWordUnsetBits = _tzcnt_u64(locusChunk);
 			nSumUnsetBits += nWordUnsetBits - sketchTail;
 			sketchTail     = 0;
-			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
-			// the following two lines must be before the iByte increment, otherwise we are subtracting before the test and may wrap
-			const size_t nRemainingWholeBytes{nBytesToHash - iByte};
-			const size_t nRemainingWholeWords{nRemainingWholeBytes / wordSize};
 			iByte         += locusChunkSize;
-			locusChunkSize = static_cast<size_t>(nRemainingWholeWords > 0) * wordSize + static_cast<size_t>(nRemainingWholeWords == 0) * tailBytesToHash;
 		}
 		iSketch += nSumUnsetBits / sketchSize;
-		std::cout << iSketch << "|" << nWordUnsetBits << "|" << nSumUnsetBits << "|" << nSumUnsetBits % sketchSize << "|" << locusChunkSize << "|";
 		filledIndexes.push_back(iSketch);
 		sketches[sketchBeg + iSketch] = static_cast<uint16_t>(nSumUnsetBits % sketchSize);
 		++iSketch;
 		const uint64_t bitsDone{iSketch * sketchSize};
 		iByte      = bitsDone / byteSize;
 		sketchTail = bitsDone % byteSize;
-		std::cout << iByte << "|" << sketchTail << "\n";
+	}
+	// Must deal with the potential overshoot in sketch number if the last chunk of sketches is empty
+	if ( (!filledIndexes.empty() ) && (filledIndexes.back() >= kSketches) ){
+		filledIndexes.pop_back();
 	}
 	for (const auto flInd : filledIndexes){
 		std::cout << flInd << " ";
@@ -468,6 +464,7 @@ int main() {
 	constexpr size_t wordSizeInBits  = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
+	//constexpr size_t nIndividuals    = 1642;
 	constexpr size_t nIndividuals    = 155;
 	constexpr size_t kSketches       = 23;
 	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( (nIndividuals % kSketches) > 0 );
@@ -493,37 +490,26 @@ int main() {
 			++iByte;
 		}
 	}
-	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
-		std::cout << std::bitset<byteSize>(*blIt);
-	}
-	std::cout << "\n";
 	// pad out the extra individuals by randomly sampling from the given set
 	for (size_t iAddIndiv = nIndividuals; iAddIndiv < nIndivToHash; ++iAddIndiv){
 		const size_t iLocByte    = iAddIndiv / byteSize;
 		const auto iInLocByte    = static_cast<uint8_t>(iAddIndiv % byteSize);
 		auto bytePair            = static_cast<uint16_t>(binLocus1[iLocByte]);
-		const size_t perIndiv    = seedPRNG.sampleInt(nIndividuals);                                   // post-increment to use current value for index first
+		const size_t perIndiv    = seedPRNG.sampleInt(nIndividuals);
 		const size_t permByteInd = perIndiv / byteSize;
 		const auto permInByteInd = static_cast<uint8_t>(perIndiv % byteSize);
-		std::cout << perIndiv << " ";
 		// Pair the current locus byte with the byte containing the value to be swapped
 		// Then use the exchanging two fields trick from Hacker's Delight Chapter 2-20
 		bytePair                    |= static_cast<uint16_t>(binLocus1[permByteInd]) << byteSize;
 		const auto mask              = static_cast<uint16_t>(1 << iInLocByte);
-		const auto perMask           = static_cast<uint8_t>(1 << permInByteInd);
-		const uint16_t shiftDistance = (byteSize - iInLocByte) + permInByteInd;           // subtraction is safe b/c byteSize is the loop terminator
+		const uint16_t shiftDistance = (byteSize - iInLocByte) + permInByteInd;                        // subtraction is safe b/c iInLocByte is modulo byteSize
 		const uint16_t temp1         = ( bytePair ^ (bytePair >> shiftDistance) ) & mask;
 		const auto temp2             = static_cast<uint16_t>(temp1 << shiftDistance);
 		bytePair                    ^= temp1 ^ temp2;
 		// Transfer bits using the trick in Hacker's Delight Chapter 2-20 (do not need the full swap, just transfer from the byte pair to binLocus1)
 		// Must modify the current byte in each loop iteration because permutation indexes may fall into it
-		binLocus1[permByteInd]       ^= ( binLocus1[permByteInd] ^ static_cast<uint8_t>(bytePair >> byteSize) ) & perMask;
+		binLocus1[iLocByte]         ^= ( binLocus1[iLocByte] ^ static_cast<uint8_t>(bytePair) ) & static_cast<uint8_t>(mask);
 	}
-	std::cout << "\n";
-	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
-		std::cout << std::bitset<byteSize>(*blIt);
-	}
-	std::cout << "\n";
 	binLocus1.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
 	binLocus2 = binLocus1;
 	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
@@ -532,7 +518,7 @@ int main() {
 	std::cout << "\n";
 	//const size_t remainder = (nIndividuals % byteSize ? byteSize - nIndividuals % byteSize : 0);
 	//binLocus.back() &= std::numeric_limits<uint8_t>::max() >> remainder;
-	std::vector<size_t> ranIntsUp{seedPRNG.fyIndexesUp(nIndividuals)};
+	std::vector<size_t> ranIntsUp{seedPRNG.fyIndexesUp(nIndivToHash)};
 	const std::array<float, 2> res1 = locusOPHold(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds1, prng1, binLocus1, sketches1);
 	const std::array<float, 2> res2 = locusOPH(0, nIndividuals, locusSize, kSketches, sketchSize, ranIntsUp, seeds2, prng2, binLocus2, sketches2);
 	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){

@@ -251,24 +251,21 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	// Now make the sketches
 	time1 = std::chrono::high_resolution_clock::now();
 	constexpr uint16_t emptyBinToken{std::numeric_limits<uint16_t>::max()};
-	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
-	const size_t nBytesToHashP1 = nBytesToHash + 1;                                    // for remaining byte number calculation
 	std::vector<size_t> filledIndexes;                                                 // indexes of the non-empty sketches
 	iByte = 0;
 	size_t sketchBeg{locusInd * kSketches};
 	constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
 	size_t iSketch{0};
 	uint64_t sketchTail{0};                                                            // left over buts from beyond the last full byte of the previous sketch
-	size_t locusChunkSize = (wordSize > nBytesToHash ? nBytesToHash : wordSize);
-	while (iByte < nBytesToHash){
+	size_t locusChunkSize = (wordSize > binLocus.size() ? binLocus.size() : wordSize);
+	while ( iByte < binLocus.size() ){
 		uint64_t nWordUnsetBits{wordSizeInBits};
 		uint64_t nSumUnsetBits{0};
-		while ( (nWordUnsetBits == wordSizeInBits) && (iByte < nBytesToHash) ){
+		while ( (nWordUnsetBits == wordSizeInBits) && ( iByte < binLocus.size() ) ){
 			uint64_t locusChunk{allBitsSet};
-			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
-			const size_t nRemainingBytes{nBytesToHashP1 - iByte};
+			// TODO: add cassert() for iByte < binLocus.size(); must be true since this is the loop conditions
+			const size_t nRemainingBytes{binLocus.size() - iByte};
 			locusChunkSize = static_cast<size_t>(nRemainingBytes >= wordSize) * wordSize + static_cast<size_t>(nRemainingBytes < wordSize) * nRemainingBytes;
-			std::cout << iByte << "; " << locusChunkSize << "; " << binLocus.size() << "\n";
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
 			locusChunk    &= allBitsSet << sketchTail;
 			nWordUnsetBits = _tzcnt_u64(locusChunk);
@@ -277,16 +274,15 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			iByte         += locusChunkSize;
 		}
 		iSketch += nSumUnsetBits / sketchSize;
+		if (iSketch >= kSketches){
+			break;
+		}
 		filledIndexes.push_back(iSketch);
 		sketches[sketchBeg + iSketch] = static_cast<uint16_t>(nSumUnsetBits % sketchSize);
 		++iSketch;
 		const uint64_t bitsDone{iSketch * sketchSize};
 		iByte      = bitsDone / byteSize;
 		sketchTail = bitsDone % byteSize;
-	}
-	// Must deal with the potential overshoot in sketch number if the last chunk of sketches is empty
-	if ( (!filledIndexes.empty() ) && (filledIndexes.back() >= kSketches) ){
-		filledIndexes.pop_back();
 	}
 	/*
 	if (sketchSize >= wordSizeInBits){
@@ -459,7 +455,7 @@ int main() {
 	constexpr size_t wordSizeInBits  = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
-	constexpr size_t nIndividuals    = 40;
+	constexpr size_t nIndividuals    = 41;
 	//constexpr size_t nIndividuals    = 155;
 	constexpr size_t kSketches       = 20;
 	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( (nIndividuals % kSketches) > 0 );

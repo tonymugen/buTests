@@ -184,21 +184,18 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 	filledIndexes.clear();
 	std::vector<uint16_t> sketchesMem(kSketches, emptyBinToken);
 	std::vector<uint32_t> seedsMem{static_cast<uint32_t>( prngMem.ranInt() )};
-	const size_t nBytesToHash{(kSketches * sketchSize) / byteSize};
-	const size_t nBytesToHashP1{nBytesToHash + 1};                                    // for remaining byte number calculation
 	iByte = 0;
 	constexpr uint64_t allBitsSet{std::numeric_limits<uint64_t>::max()};
 	size_t iSketch{0};
 	uint64_t sketchTail{0};                                                            // left over buts from beyond the last full byte of the previous sketch
-	size_t locusChunkSize = (wordSize > nBytesToHash ? nBytesToHash : wordSize);
-
-	while (iByte < nBytesToHash){
+	size_t locusChunkSize = (wordSize > binLocus.size() ? binLocus.size() : wordSize);
+	while ( iByte < binLocus.size() ){
 		uint64_t nWordUnsetBits{wordSizeInBits};
 		uint64_t nSumUnsetBits{0};
-		while ( (nWordUnsetBits == wordSizeInBits) && (iByte < nBytesToHash) ){
+		while ( (nWordUnsetBits == wordSizeInBits) && ( iByte < binLocus.size() ) ){
 			uint64_t locusChunk{allBitsSet};
 			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
-			const size_t nRemainingBytes{nBytesToHashP1 - iByte};
+			const size_t nRemainingBytes{binLocus.size() - iByte};
 			locusChunkSize = static_cast<size_t>(nRemainingBytes >= wordSize) * wordSize + static_cast<size_t>(nRemainingBytes < wordSize) * nRemainingBytes;
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
 			locusChunk    &= allBitsSet << sketchTail;
@@ -208,6 +205,9 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 			iByte         += locusChunkSize;
 		}
 		iSketch += nSumUnsetBits / sketchSize;
+		if (iSketch >= kSketches){
+			break;
+		}
 		filledIndexes.push_back(iSketch);
 		sketchesMem[iSketch] = static_cast<uint16_t>(nSumUnsetBits % sketchSize);
 		++iSketch;
@@ -245,7 +245,6 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 				seedsMem.push_back( static_cast<uint32_t>( prngMem.ranInt() ) );
 			}
 		}
-		std::cout << "\nGot here\n" << std::flush;
 	}
 	for (size_t jSketch = 0; jSketch < kSketches; ++jSketch){
 		result[0] += static_cast<int32_t>(sketchesNaive[jSketch] != sketchesMem[jSketch]);
@@ -256,9 +255,11 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 		std::vector<uint32_t> seedsSmall{static_cast<uint32_t>( prngSmall.ranInt() )};
 		iSketch = 0;
 		iByte   = 0;
+		constexpr uint64_t roundMask{0xfffffffffffffff8};
+		const size_t nWholeWordBytes{binLocus.size() & roundMask};
 		uint64_t initialShift{0};
 		uint64_t carryOverZeros{0};
-		while (iByte < nBytesToHash){
+		while (iByte < nWholeWordBytes){
 			uint64_t locusChunk{0};
 			memcpy(&locusChunk, binLocus.data() + iByte, wordSize);
 			uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
@@ -268,6 +269,9 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 				const uint64_t lastSketch{_tzcnt_u64(splitSketch)};
 				if (lastSketch < sketchSize){
 					const size_t prevIsketch{iSketch - 1};
+					if (prevIsketch >= kSketches){
+						break;
+					}
 					filledIndexes.push_back(prevIsketch);
 					sketchesSmall[prevIsketch] = static_cast<uint16_t>(lastSketch);
 				}
@@ -287,6 +291,9 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 				locusChunk         &= finalFix;
 				trackingMask       &= finalFix;
 				iSketch            += idxToSkip;
+				if (iSketch >= kSketches){
+					break;
+				}
 				filledIndexes.push_back(iSketch);
 				sketchesSmall[iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 				++iSketch;
@@ -298,9 +305,9 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 			initialShift    = (sketchSize * iSketch) % wordSizeInBits;
 			iByte          += wordSize;
 		}
-		if (iByte < nBytesToHash){
+		if ( iByte < binLocus.size() ){
 			uint64_t locusChunk{0};
-			memcpy(&locusChunk, binLocus.data() + iByte, nBytesToHash - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
+			memcpy(&locusChunk, binLocus.data() + iByte, binLocus.size() - iByte);              // subtraction is safe inside the iByte < nBytesToHash test
 			if (carryOverZeros != 0){
 				constexpr uint64_t trackingMask{std::numeric_limits<uint64_t>::max()};
 				uint64_t splitSketch{locusChunk | (trackingMask << initialShift)};
@@ -323,6 +330,9 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 				const auto finalFix = static_cast<uint64_t>( -static_cast<uint64_t>(iShift < wordSizeInBits) );
 				locusChunk         &= finalFix;
 				iSketch            += idxToSkip;
+				if (iSketch >= kSketches){
+					break;
+				}
 				filledIndexes.push_back(iSketch);
 				sketchesSmall[iSketch] = static_cast<uint16_t>(setBit % sketchSize);             // should be safe: each thread accesses different vector elements
 				++iSketch;
@@ -367,14 +377,14 @@ std::array<int32_t, 2> locusOPH(const size_t &nIndividuals, const size_t &kSketc
 }
 
 int main(){
-	constexpr size_t minKsketches   = 20;
-	constexpr size_t maxKsketches   = 30;
-	constexpr size_t maxIndMult     = 5;
+	constexpr size_t minKsketches   = 3;
+	constexpr size_t maxKsketches   = 100;
+	constexpr size_t maxIndMult     = 100;
 	constexpr uint64_t roundMask    = 0xfffffffffffffff8;
 	constexpr size_t wordSizeInBits = 64;
 	constexpr size_t wordSize       = 8;
 	constexpr size_t byteSize       = 8;
-	std::cout << "nIndividuals\tnIndivToHash\tkSketches\tseed\tMEMsum\tSmallSum\n" << std::flush;
+	std::cout << "nIndividuals\tnIndivToHash\tkSketches\tseed\tMEMsum\tSmallSum\n";
 	for (size_t kSketches = minKsketches; kSketches <= maxKsketches; ++kSketches){
 		for (size_t nIndividuals = kSketches * 2; nIndividuals <= kSketches * maxIndMult; ++nIndividuals){
 			BayesicSpace::RanDraw seedPRNG;
@@ -385,18 +395,24 @@ int main(){
 			const size_t locusSize     = ( ( nIndivToHash + (byteSize - 1) ) & roundMask ) / byteSize;             // round up the nIndivToHash to the nearest multiple of 8
 			const size_t ranBitVecSize = nIndivToHash / wordSizeInBits + static_cast<size_t>( (nIndivToHash % wordSizeInBits) > 0 );
 			std::vector<uint8_t> binLocus;
+			/*
 			std::vector<uint64_t> ranBits;
 			for (size_t i = 0; i < ranBitVecSize; ++i){
 				ranBits.push_back( seedPRNG.ranInt() );
 			}
 			size_t iByte = 0;
-			binLocus.resize(locusSize);
+			*/
+			binLocus.resize(locusSize, 0);
+			binLocus[0] = 0b00001111;
+			/*
 			for (const auto eachWord : ranBits){
 				for (size_t byteInWord = 0; (byteInWord < wordSize) && (iByte < locusSize); ++byteInWord){
-					binLocus[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) ) & (static_cast<uint8_t>(1) << byteInWord);
+					//binLocus[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) ) & (static_cast<uint8_t>(1) << byteInWord);
+					binLocus[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) );
 					++iByte;
 				}
 			}
+			*/
 			// pad out the extra individuals by randomly sampling from the given set
 			for (size_t iAddIndiv = nIndividuals; iAddIndiv < nIndivToHash; ++iAddIndiv){
 				const size_t iLocByte    = iAddIndiv / byteSize;
@@ -420,7 +436,7 @@ int main(){
 			if ( (nIndivToHash % byteSize) > 0 ){
 				binLocus.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
 			}
-			std::cout << nIndividuals << "\t" << nIndivToHash << "\t" << kSketches << "\t" << seedInt << "\t" << std::flush;
+			std::cout << nIndividuals << "\t" << nIndivToHash << "\t" << kSketches << "\t" << seedInt << "\t";
 			const std::array<int32_t, 2> res = locusOPH(nIndivToHash, kSketches, seedInt, binLocus);
 			std::cout << res[0] << "\t" << res[1] << "\n";
 		}

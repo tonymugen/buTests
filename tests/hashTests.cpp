@@ -268,6 +268,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 			// TODO: add cassert() for iByte < nBytesToHash; must be true since this is the loop conditions
 			const size_t nRemainingBytes{nBytesToHashP1 - iByte};
 			locusChunkSize = static_cast<size_t>(nRemainingBytes >= wordSize) * wordSize + static_cast<size_t>(nRemainingBytes < wordSize) * nRemainingBytes;
+			std::cout << iByte << "; " << locusChunkSize << "; " << binLocus.size() << "\n";
 			memcpy(&locusChunk, binLocus.data() + iByte, locusChunkSize);
 			locusChunk    &= allBitsSet << sketchTail;
 			nWordUnsetBits = _tzcnt_u64(locusChunk);
@@ -287,10 +288,6 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 	if ( (!filledIndexes.empty() ) && (filledIndexes.back() >= kSketches) ){
 		filledIndexes.pop_back();
 	}
-	for (const auto flInd : filledIndexes){
-		std::cout << flInd << " ";
-	}
-	std::cout << "\n";
 	/*
 	if (sketchSize >= wordSizeInBits){
 		for (auto blIt = binLocus.rbegin(); blIt != binLocus.rend(); ++blIt){
@@ -429,9 +426,7 @@ std::array<float, 2> locusOPH(const size_t &locusInd, const size_t &nIndividuals
 		if ( filledIndexes.empty() ){ // in the case where the whole locus is monomorphic, pick a random index as filled
 			filledIndexes.push_back( rng.sampleInt(kSketches) );
 		}
-		if (filledIndexes.size() > kSketches){
-			throw std::string("more filled than K");
-		}
+		// TODO: add cassert() that filledIndexes.size() <= kSketches
 		size_t emptyCount = kSketches - filledIndexes.size();
 		while (emptyCount > 0){
 			for (const auto &eachIdx : filledIndexes){
@@ -464,14 +459,14 @@ int main() {
 	constexpr size_t wordSizeInBits  = 64;
 	constexpr size_t wordSize        = 8;
 	constexpr size_t byteSize        = 8;
-	//constexpr size_t nIndividuals    = 1642;
-	constexpr size_t nIndividuals    = 155;
-	constexpr size_t kSketches       = 23;
+	constexpr size_t nIndividuals    = 40;
+	//constexpr size_t nIndividuals    = 155;
+	constexpr size_t kSketches       = 20;
 	constexpr size_t sketchSize      = nIndividuals / kSketches + static_cast<size_t>( (nIndividuals % kSketches) > 0 );
 	constexpr size_t nIndivToHash    = sketchSize * kSketches;                                                   // round up to the nearest divisible by kSketches number
 	constexpr size_t locusSize       = ( ( nIndivToHash + (byteSize - 1) ) & roundMask ) / byteSize;             // round up the nIndivToHash to the nearest multiple of 8
 	constexpr size_t ranBitVecSize   = nIndivToHash / wordSizeInBits + static_cast<size_t>( (nIndivToHash % wordSizeInBits) > 0 );
-	std::cout << sketchSize << "; " << nIndivToHash << "; " << locusSize <<"\n";
+	std::cout << sketchSize << "; " << nIndivToHash << "; " << locusSize << "\n";
 	std::vector<uint32_t> seeds1{static_cast<uint32_t>( prng1.ranInt() )};
 	std::vector<uint32_t> seeds2{static_cast<uint32_t>( prng2.ranInt() )};
 	std::vector<uint16_t> sketches1(kSketches, emptyBinToken);
@@ -510,7 +505,9 @@ int main() {
 		// Must modify the current byte in each loop iteration because permutation indexes may fall into it
 		binLocus1[iLocByte]         ^= ( binLocus1[iLocByte] ^ static_cast<uint8_t>(bytePair) ) & static_cast<uint8_t>(mask);
 	}
-	binLocus1.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
+	if ( (nIndivToHash % byteSize) > 0 ){
+		binLocus1.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
+	}
 	binLocus2 = binLocus1;
 	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
 		std::cout << std::bitset<byteSize>(*blIt);

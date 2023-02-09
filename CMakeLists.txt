@@ -61,6 +61,27 @@ add_executable(ophCorrect
 target_include_directories(ophCorrect
 	PRIVATE externals/bayesicUtilities/include
 )
+set_target_properties(ophCorrect PROPERTIES
+	CXX_STANDARD         14
+	CXX_STANDARD_REQURED ON
+	CXX_EXTENSIONS       OFF
+)
+# POPCNT tests
+add_executable(popcnt
+	tests/popcntTest.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(popcnt
+	PRIVATE externals/bayesicUtilities/include
+)
+target_compile_options(popcnt
+	PRIVATE -mpopcnt
+)
+set_target_properties(popcnt PROPERTIES
+	CXX_STANDARD         14
+	CXX_STANDARD_REQURED ON
+	CXX_EXTENSIONS       OFF
+)
 
 # Fisher-Yates tests
 add_executable(fyTests
@@ -77,8 +98,3 @@ set_target_properties(hashTests PROPERTIES
 	CXX_EXTENSIONS       OFF
 )
 
-set_target_properties(ophCorrect PROPERTIES
-	CXX_STANDARD         14
-	CXX_STANDARD_REQURED ON
-	CXX_EXTENSIONS       OFF
-)

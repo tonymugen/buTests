@@ -474,7 +474,7 @@ int main() {
 		ranBits.push_back( seedPRNG.ranInt() );
 	}
 	size_t iByte = 0;
-	binLocus1.resize(locusSize);
+	binLocus1.resize( locusSize, std::numeric_limits<uint8_t>::max() );
 	for (const auto eachWord : ranBits){
 		for (size_t byteInWord = 0; (byteInWord < wordSize) && (iByte < locusSize); ++byteInWord){
 			binLocus1[iByte] = static_cast<uint8_t>( eachWord >> (byteInWord * byteSize) ) & (static_cast<uint8_t>(1) << byteInWord);
@@ -501,9 +501,11 @@ int main() {
 		// Must modify the current byte in each loop iteration because permutation indexes may fall into it
 		binLocus1[iLocByte]         ^= ( binLocus1[iLocByte] ^ static_cast<uint8_t>(bytePair) ) & static_cast<uint8_t>(mask);
 	}
+	/*
 	if ( (nIndivToHash % byteSize) > 0 ){
 		binLocus1.back() |= std::numeric_limits<uint8_t>::max() << static_cast<uint8_t>(nIndivToHash % byteSize);
 	}
+	*/
 	binLocus2 = binLocus1;
 	for (auto blIt = binLocus1.rbegin(); blIt != binLocus1.rend(); ++blIt){
 		std::cout << std::bitset<byteSize>(*blIt);

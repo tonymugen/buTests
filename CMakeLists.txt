@@ -75,7 +75,7 @@ target_include_directories(popcnt
 	PRIVATE externals/bayesicUtilities/include
 )
 target_compile_options(popcnt
-	PRIVATE -mpopcnt
+	PRIVATE -mpopcnt -mavx2 -msse2
 )
 set_target_properties(popcnt PROPERTIES
 	CXX_STANDARD         14

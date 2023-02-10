@@ -29,6 +29,7 @@
 #include <iostream>
 #include <cstring>
 #include <chrono>
+#include <bitset>
 #include <immintrin.h>
 
 #include "random.hpp"
@@ -64,6 +65,57 @@ uint64_t countSetBitsPOP(const std::vector<uint8_t> &inVec){
 	return totSet;
 }
 
+uint64_t countEqual(const std::vector<uint16_t> &vec1, const std::vector<uint16_t> &vec2) {
+	uint64_t sum{0};
+	for (size_t iVec = 0; iVec < vec1.size(); ++iVec){
+		sum += static_cast<uint64_t>(vec1[iVec] == vec2[iVec]);
+	}
+	return sum;
+}
+
+uint64_t countEqualAVX(const std::vector<uint16_t> &vec1, const std::vector<uint16_t> &vec2) {
+	constexpr size_t bytesInVec = 32;
+	constexpr size_t elsInVec   = 16;
+	constexpr auto roundMask16  = static_cast<uint64_t>(-16);
+	uint64_t sum{0};
+	size_t iChunk{0};
+	const size_t nWholeVec{vec1.size() & roundMask16};
+	while (iChunk < nWholeVec){
+		__m256i vec1p{0};
+		__m256i vec2p{0};
+		memcpy(&vec1p, vec1.data() + iChunk, bytesInVec);
+		memcpy(&vec2p, vec2.data() + iChunk, bytesInVec);
+		const __m256i resVec{_mm256_cmpeq_epi16(vec1p, vec2p)};
+		auto res64 = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 0) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 1) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 2) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 3) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		iChunk    += elsInVec;
+	}
+	if (vec1.size() > nWholeVec){
+		__m256i vec1p{0};
+		__m256i vec2p{_mm256_set1_epi32(-1)};  // set all bits so that the tails are unequal
+		const size_t remainder = vec1.size() - nWholeVec;
+		memcpy(&vec1p, vec1.data() + iChunk, remainder);
+		memcpy(&vec2p, vec2.data() + iChunk, remainder);
+		const __m256i resVec{_mm256_cmpeq_epi16(vec1p, vec2p)};
+		auto res64 = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 0) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 1) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 2) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+		res64      = static_cast<uint64_t>( _mm256_extract_epi64(resVec, 3) );
+		sum       += static_cast<uint64_t>( _mm_popcnt_u64(res64) );
+	}
+	sum = sum / elsInVec;
+	return sum;
+}
+
 int main(){
 	std::chrono::duration<float, std::milli> karnTime{0};
 	std::chrono::duration<float, std::milli> popcntTime{0};
@@ -93,5 +145,23 @@ int main(){
 	popcntTime               = time2 - time1;
 	std::cout << karnRes << " " << popcntRes << "\n";
 	std::cout << karnTime.count() << " " << popcntTime.count() << "\n";
+	std::cout << "=====================\nCMPEQ test\n";
+	std::chrono::duration<float, std::milli> sumTime{0};
+	std::chrono::duration<float, std::milli> avxTime{0};
+	constexpr size_t tstVecSize = 1600003;
+	std::vector<uint16_t> tstVec1(tstVecSize, 1);
+	std::vector<uint16_t> tstVec2(tstVecSize, 3);
+	tstVec1[100] = tstVec2[100];
+	tstVec1[303] = tstVec2[303];
+	time1                  = std::chrono::high_resolution_clock::now();
+	const uint64_t tstRes1 = countEqual(tstVec1, tstVec2);
+	time2                  = std::chrono::high_resolution_clock::now();
+	sumTime                = time2 - time1;
+	time1                  = std::chrono::high_resolution_clock::now();
+	const uint64_t tstRes2 = countEqualAVX(tstVec1, tstVec2);
+	time2                  = std::chrono::high_resolution_clock::now();
+	avxTime                = time2 - time1;
+	std::cout << tstRes1 << " " << tstRes2 << "\n";
+	std::cout << sumTime.count() << " " << avxTime.count() << "\n";
 }
 

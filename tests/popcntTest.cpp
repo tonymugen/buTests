@@ -24,12 +24,14 @@
  */
 
 #include <cstdint>
+#include <numeric>
 #include <vector>
 #include <limits>
 #include <iostream>
 #include <cstring>
 #include <chrono>
-#include <bitset>
+#include <algorithm>
+#include <functional>
 #include <immintrin.h>
 
 #include "random.hpp"
@@ -70,6 +72,11 @@ uint64_t countEqual(const std::vector<uint16_t> &vec1, const std::vector<uint16_
 	for (size_t iVec = 0; iVec < vec1.size(); ++iVec){
 		sum += static_cast<uint64_t>(vec1[iVec] == vec2[iVec]);
 	}
+	return sum;
+}
+
+uint64_t countEqualDP(const std::vector<uint16_t> &vec1, const std::vector<uint16_t> &vec2) {
+	const uint64_t sum = static_cast<uint64_t>( std::inner_product( vec1.begin(), vec1.end(), vec2.begin(), 0, std::plus<>(), std::equal_to<>() ) );
 	return sum;
 }
 
@@ -147,6 +154,7 @@ int main(){
 	std::cout << karnTime.count() << " " << popcntTime.count() << "\n";
 	std::cout << "=====================\nCMPEQ test\n";
 	std::chrono::duration<float, std::milli> sumTime{0};
+	std::chrono::duration<float, std::milli> dpTime{0};
 	std::chrono::duration<float, std::milli> avxTime{0};
 	constexpr size_t tstVecSize = 1600003;
 	std::vector<uint16_t> tstVec1(tstVecSize, 1);
@@ -158,10 +166,14 @@ int main(){
 	time2                  = std::chrono::high_resolution_clock::now();
 	sumTime                = time2 - time1;
 	time1                  = std::chrono::high_resolution_clock::now();
-	const uint64_t tstRes2 = countEqualAVX(tstVec1, tstVec2);
+	const uint64_t tstRes2 = countEqualDP(tstVec1, tstVec2);
+	time2                  = std::chrono::high_resolution_clock::now();
+	dpTime                 = time2 - time1;
+	time1                  = std::chrono::high_resolution_clock::now();
+	const uint64_t tstRes3 = countEqualAVX(tstVec1, tstVec2);
 	time2                  = std::chrono::high_resolution_clock::now();
 	avxTime                = time2 - time1;
-	std::cout << tstRes1 << " " << tstRes2 << "\n";
-	std::cout << sumTime.count() << " " << avxTime.count() << "\n";
+	std::cout << tstRes1 << " " << tstRes2 << " " << tstRes3 << "\n";
+	std::cout << sumTime.count() << " " << dpTime.count() << " " << avxTime.count() << "\n";
 }
 

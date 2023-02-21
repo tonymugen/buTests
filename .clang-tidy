@@ -21,3 +21,9 @@ Checks: "*,
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
 FormatStyle:     none
+CheckOptions:
+ - key: readability-magic-numbers.IgnoredFloatingPointValues
+   value: '1.0;0.5;2.0;'
+ - key: cppcoreguidelines-avoid-magic-numbers.IgnoredFloatingPointValues
+   value: '1.0;0.5;2.0;'
+

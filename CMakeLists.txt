@@ -92,9 +92,23 @@ target_include_directories(fyTests
 	PRIVATE externals/bayesicUtilities/include
 )
 
-set_target_properties(hashTests PROPERTIES
+set_target_properties(fyTests PROPERTIES
 	CXX_STANDARD         14
 	CXX_STANDARD_REQURED ON
 	CXX_EXTENSIONS       OFF
 )
 
+# PRNG tests
+add_executable(prngTst
+	tests/prngTests.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(prngTst
+	PRIVATE externals/bayesicUtilities/include
+)
+
+set_target_properties(prngTst PROPERTIES
+	CXX_STANDARD         14
+	CXX_STANDARD_REQURED ON
+	CXX_EXTENSIONS       OFF
+)

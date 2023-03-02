@@ -112,3 +112,18 @@ set_target_properties(prngTst PROPERTIES
 	CXX_STANDARD_REQURED ON
 	CXX_EXTENSIONS       OFF
 )
+
+# MurMurHash3 tests
+add_executable(mmhTest
+	tests/mmhTests.cpp
+	externals/bayesicUtilities/src/random.cpp
+)
+target_include_directories(mmhTest
+	PRIVATE externals/bayesicUtilities/include
+)
+
+set_target_properties(mmhTest PROPERTIES
+	CXX_STANDARD         14
+	CXX_STANDARD_REQURED ON
+	CXX_EXTENSIONS       OFF
+)

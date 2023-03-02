@@ -31,6 +31,49 @@
 
 #include "random.hpp"
 
+uint32_t murMurHash(const size_t &startInd, const size_t &nElements, std::vector<uint16_t> &sketches, const uint32_t &seed) {
+	// TODO: add an assert() on nElements != 0 and startInd < sketches_.size()
+	uint32_t hash  = seed;
+	auto blocks    = reinterpret_cast<const uint32_t *>(sketches.data() + startInd);
+	size_t nBlocks = nElements / 2; // each sketch is 16 bits
+
+	// body
+	for (size_t iBlock = 0; iBlock < nBlocks; ++iBlock){
+		uint32_t k1 = blocks[iBlock];
+
+		k1 *= 0xcc9e2d51;
+		k1  = (k1 << 15) | (k1 >> 17);
+		k1 *= 0x1b873593;
+
+		hash ^= k1;
+		hash  = (hash << 13) | (hash >> 19);
+		hash  = hash * 5 + 0xe6546b64;
+	}
+
+	// tail, if exists
+	if (nElements % 2){
+		uint32_t k1 = static_cast<uint32_t>(sketches[startInd + nElements - 1]);
+
+		k1 *= 0xcc9e2d51;
+		k1  = (k1 << 15) | (k1 >> 17);
+		k1 *= 0x1b873593;
+
+		hash ^= k1;
+		hash  = (hash << 13) | (hash >> 19);
+		hash  = hash * 5 + 0xe6546b64;
+	}
+
+	// finalize
+	hash ^= sizeof(size_t);
+	hash ^= hash >> 16;
+	hash *= 0x85ebca6b;
+	hash ^= hash >> 13;
+	hash *= 0xc2b2ae35;
+	hash ^= hash >> 16;
+
+	return hash;
+}
+
 uint32_t murMurHash(const size_t &key, const uint32_t &seed) {
 	uint32_t hash = seed;
 
@@ -530,3 +573,26 @@ int main() {
 	std::cout << "\n";
 	std::cout << res1[0] << "\t" << res1[1] << "\t" << res2[0] << "\t" << res2[1] << "\n";
 }
+
+uint32_t murMurHash(const size_t &start, const size_t &length, const std::vector<uint16_t> &key, const uint32_t &seed) {
+	constexpr size_t keysPerWord{sizeof(size_t) / sizeof(uint16_t)};
+	constexpr auto roundMask = static_cast<size_t>( -(keysPerWord) );
+	uint32_t hash{seed};
+	const size_t end{start + length};
+	const size_t wholeEnd{end & roundMask};
+
+	size_t keyIdx{start};
+	while (keyIdx < wholeEnd){
+		size_t keyBlock{0};
+		memcpy(&keyBlock, key.data() + keyIdx, keysPerWord);
+		hash    = murMurHash(keyBlock, hash);
+		keyIdx += keysPerWord;
+	}
+	if (end > wholeEnd){  // if there is a tail
+		size_t keyBlock{0};
+		memcpy(&keyBlock, key.data() + keyIdx, keysPerWord);
+		hash = murMurHash(keyBlock, hash);
+	}
+	return hash;
+}
+
